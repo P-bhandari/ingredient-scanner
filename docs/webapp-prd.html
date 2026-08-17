@@ -1,0 +1,527 @@
+<title>Label Lens — Webapp MVP Requirements</title>
+<style>
+  :root {
+    --paper: #f4f5f1;
+    --paper-raised: #ffffff;
+    --ink: #171b1a;
+    --ink-soft: #4b5450;
+    --accent: #1f5c56;
+    --accent-soft: #e4ede9;
+    --verified: #3f7a56;
+    --verified-bg: #e8f1e9;
+    --claim: #a66a1e;
+    --claim-bg: #f5ead9;
+    --line: #d8dbd3;
+    --line-strong: #b9beb4;
+    --code-bg: #eceee8;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #14171a;
+      --paper-raised: #1b1f21;
+      --ink: #e7e9e4;
+      --ink-soft: #a2a99f;
+      --accent: #6fb8ac;
+      --accent-soft: #1e2e2b;
+      --verified: #7cc499;
+      --verified-bg: #17271d;
+      --claim: #d99f4f;
+      --claim-bg: #2c2312;
+      --line: #2b302e;
+      --line-strong: #3c433f;
+      --code-bg: #1f2422;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #14171a;
+    --paper-raised: #1b1f21;
+    --ink: #e7e9e4;
+    --ink-soft: #a2a99f;
+    --accent: #6fb8ac;
+    --accent-soft: #1e2e2b;
+    --verified: #7cc499;
+    --verified-bg: #17271d;
+    --claim: #d99f4f;
+    --claim-bg: #2c2312;
+    --line: #2b302e;
+    --line-strong: #3c433f;
+    --code-bg: #1f2422;
+  }
+  :root[data-theme="light"] {
+    --paper: #f4f5f1;
+    --paper-raised: #ffffff;
+    --ink: #171b1a;
+    --ink-soft: #4b5450;
+    --accent: #1f5c56;
+    --accent-soft: #e4ede9;
+    --verified: #3f7a56;
+    --verified-bg: #e8f1e9;
+    --claim: #a66a1e;
+    --claim-bg: #f5ead9;
+    --line: #d8dbd3;
+    --line-strong: #b9beb4;
+    --code-bg: #eceee8;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    margin: 0;
+    padding: 0;
+  }
+
+  .doc-shell {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 48px 32px 96px;
+    display: grid;
+    grid-template-columns: 200px minmax(0, 740px);
+    gap: 56px;
+    justify-content: center;
+  }
+
+  @media (max-width: 980px) {
+    .doc-shell { grid-template-columns: minmax(0, 1fr); padding: 28px 20px 72px; }
+    .toc { display: none; }
+  }
+
+  /* ---- meta / masthead ---- */
+  .masthead {
+    grid-column: 1 / -1;
+    border-bottom: 1px solid var(--line-strong);
+    padding-bottom: 22px;
+    margin-bottom: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 16px;
+  }
+  .masthead h1 {
+    font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    font-weight: 600;
+    font-size: 2.1rem;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    margin: 0;
+    color: var(--ink);
+  }
+  .masthead .kicker {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+  .meta-block {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .meta-block span b { color: var(--ink); font-weight: 600; }
+
+  /* ---- toc rail ---- */
+  .toc {
+    position: sticky;
+    top: 32px;
+    align-self: start;
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    font-size: 0.76rem;
+  }
+  .toc-label {
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-soft);
+    margin-bottom: 10px;
+  }
+  .toc ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+  .toc a {
+    color: var(--ink-soft);
+    text-decoration: none;
+    display: block;
+    line-height: 1.4;
+    border-left: 2px solid transparent;
+    padding-left: 10px;
+  }
+  .toc a:hover { color: var(--accent); border-left-color: var(--accent); }
+
+  /* ---- main column ---- */
+  main { min-width: 0; }
+
+  p { margin: 0 0 16px; color: var(--ink); }
+  .lede {
+    font-size: 1.08rem;
+    color: var(--ink-soft);
+    max-width: 62ch;
+  }
+
+  section { margin-top: 52px; scroll-margin-top: 24px; }
+  section:first-of-type { margin-top: 36px; }
+
+  h2 {
+    font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    font-weight: 600;
+    font-size: 1.5rem;
+    text-wrap: balance;
+    margin: 0 0 6px;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  h2 .num {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    font-size: 0.95rem;
+    color: var(--accent);
+    font-weight: 500;
+  }
+  h2 + .rule {
+    height: 1px;
+    background: var(--line);
+    margin: 14px 0 22px;
+  }
+  h3 {
+    font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    font-size: 1.12rem;
+    font-weight: 600;
+    margin: 28px 0 10px;
+    color: var(--ink);
+  }
+
+  ul, ol { padding-left: 1.3em; margin: 0 0 16px; }
+  li { margin-bottom: 7px; }
+  li::marker { color: var(--ink-soft); }
+  strong { font-weight: 650; }
+  a { color: var(--accent); }
+  code {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    background: var(--code-bg);
+    padding: 0.12em 0.4em;
+    border-radius: 3px;
+    font-size: 0.88em;
+  }
+
+  /* ---- callout boxes ---- */
+  .box {
+    border: 1px solid var(--line-strong);
+    border-left: 3px solid var(--accent);
+    background: var(--paper-raised);
+    padding: 16px 18px;
+    border-radius: 2px;
+    margin: 18px 0;
+  }
+  .box.warn { border-left-color: var(--claim); }
+  .box p:last-child { margin-bottom: 0; }
+  .box .box-label {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    margin-bottom: 8px;
+    display: block;
+  }
+  .box.warn .box-label { color: var(--claim); }
+
+  /* ---- trust badges (live example of the §6 spec) ---- */
+  .badge-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0 22px; }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    padding: 7px 12px;
+    border-radius: 3px;
+    border: 1px solid var(--line-strong);
+  }
+  .badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .badge.verified { background: var(--verified-bg); color: var(--verified); border-color: color-mix(in srgb, var(--verified) 35%, transparent); }
+  .badge.verified::before { background: var(--verified); }
+  .badge.claim { background: var(--claim-bg); color: var(--claim); border-color: color-mix(in srgb, var(--claim) 35%, transparent); }
+  .badge.claim::before { background: var(--claim); }
+  .badge.neutral { background: var(--code-bg); color: var(--ink-soft); }
+  .badge.neutral::before { background: var(--ink-soft); }
+
+  /* ---- tables ---- */
+  .table-wrap { overflow-x: auto; margin: 18px 0; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.92rem;
+    min-width: 420px;
+  }
+  th, td {
+    text-align: left;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  th {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-soft);
+    font-weight: 500;
+  }
+  td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; }
+
+  .status-pill {
+    display: inline-block;
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 3px 9px;
+    border-radius: 20px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+
+  footer {
+    grid-column: 1 / -1;
+    margin-top: 64px;
+    padding-top: 22px;
+    border-top: 1px solid var(--line);
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    font-size: 0.76rem;
+    color: var(--ink-soft);
+  }
+  footer a { color: var(--ink-soft); }
+</style>
+
+<div class="doc-shell">
+  <div class="masthead">
+    <div>
+      <div class="kicker">Product Requirements</div>
+      <h1>Label Lens — Webapp MVP</h1>
+    </div>
+    <div class="meta-block">
+      <span><b>Status</b> — Draft for review</span>
+      <span><b>Owner</b> — Piyush Bhandari</span>
+      <span><b>Updated</b> — 2026-08-17</span>
+    </div>
+  </div>
+
+  <nav class="toc">
+    <div class="toc-label">Contents</div>
+    <ol>
+      <li><a href="#overview">1 · Overview</a></li>
+      <li><a href="#goals">2 · Goals &amp; non-goals</a></li>
+      <li><a href="#user">3 · Target user</a></li>
+      <li><a href="#data">4 · Data source &amp; content</a></li>
+      <li><a href="#features">5 · Core features</a></li>
+      <li><a href="#trust">6 · Trust &amp; certification</a></li>
+      <li><a href="#ux">7 · UX / design direction</a></li>
+      <li><a href="#arch">8 · Technical architecture</a></li>
+      <li><a href="#gaps">9 · Known data gaps</a></li>
+      <li><a href="#future">10 · Future scope</a></li>
+      <li><a href="#done">11 · Definition of done</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <section id="overview">
+      <h2><span class="num">1</span>Overview</h2>
+      <div class="rule"></div>
+      <p class="lede">Label Lens is a browsing and discovery tool for supplement products that makes ingredient and certification claims legible — specifically, the gap between what a label <em>implies</em> ("FDA registered facility," "GMP certified") and what's actually independently verified (NSF Certified for Sport, Informed Choice, USP Verified).</p>
+      <p>The inspiration is <a href="https://cotinashop.com" target="_blank" rel="noopener">Cotina</a>, a "material based shopping" site for clothing that lets health-conscious shoppers filter apparel by fabric composition and certification rather than brand or price. Label Lens applies the same discovery model to consumer products, starting with protein powder.</p>
+      <p>This is not e-commerce. There's no cart, no checkout, no accounts. It's a filterable directory: browse, filter down to what matters to you, read a transparent product page, and (eventually) get pointed to where you can buy it. For the MVP, that last step is intentionally a stub — see <a href="#gaps">§9</a>.</p>
+    </section>
+
+    <section id="goals">
+      <h2><span class="num">2</span>Goals &amp; non-goals</h2>
+      <div class="rule"></div>
+      <h3>Goals (MVP)</h3>
+      <ul>
+        <li>Browse and exhaustively filter the 396-product protein powder dataset by ingredient, certification, brand, category, and other label attributes.</li>
+        <li>Present each product's trust signals honestly — real independent certification, clearly separated from self-asserted claims.</li>
+        <li>Look and feel like a finished consumer product, not a data dump. Cotina is the visual/UX bar.</li>
+        <li>Run session-only, no login.</li>
+        <li>Keep the dataset itself refreshable without a rebuild of the app.</li>
+      </ul>
+      <h3>Non-goals (MVP)</h3>
+      <ul>
+        <li>No e-commerce, cart, or checkout.</li>
+        <li>No real outbound retailer links (Amazon, Whole Foods, iHerb) — see <a href="#gaps">§9</a>.</li>
+        <li>No price display — not in the current dataset.</li>
+        <li>No user accounts, saved profiles across devices, or cross-session persistence.</li>
+        <li>No categories beyond protein powder (whey / plant / pea / casein / collagen) — broader "consumer products" is future scope (<a href="#future">§10</a>).</li>
+      </ul>
+    </section>
+
+    <section id="user">
+      <h2><span class="num">3</span>Target user</h2>
+      <div class="rule"></div>
+      <p>Health-conscious supplement buyers — particularly athletes and anyone subject to drug testing — who've been burned by labels that <em>read</em> as certified but aren't, and who want to filter out ingredients (artificial sweeteners, proprietary blends, specific allergens) without reading a label in a supplement aisle or squinting at a product photo on Amazon.</p>
+    </section>
+
+    <section id="data">
+      <h2><span class="num">4</span>Data source &amp; content</h2>
+      <div class="rule"></div>
+      <p>Current dataset: <code>data/dataset_full.json</code> — 396 products, 266 on-market, 211 brands, across:</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Category</th><th class="num">Products</th><th class="num">On market</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Whey</td><td class="num">150</td><td class="num">99</td></tr>
+            <tr><td>Plant</td><td class="num">105</td><td class="num">82</td></tr>
+            <tr><td>Pea</td><td class="num">61</td><td class="num">28</td></tr>
+            <tr><td>Casein</td><td class="num">21</td><td class="num">18</td></tr>
+            <tr><td>Collagen</td><td class="num">59</td><td class="num">39</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Sourced from the NIH DSLD v9 API via the existing <code>label-lens</code> Python pipeline (<code>labellens/dsld.py</code>, <code>labellens/taxonomy.py</code>, <code>build_dataset_full.py</code>), deduped to distinct brand+formula combinations with whey capped at 150 so it doesn't dominate the much smaller casein/collagen categories.</p>
+      <p><strong>Per-product fields available today:</strong> brand, product name, UPC, on/off-market status, entry date, manufacturer, serving size, full macro panel (calories, protein, fat, carbs, sugar, fiber, sodium, calcium, potassium), full ingredient list with taxonomy categories (protein source, artificial sweetener, filler/bulking agent, allergen source, etc.), allergen declarations, proprietary blend flags, and the Trust object (<a href="#trust">§6</a>).</p>
+      <div class="box">
+        <span class="box-label">Refresh cadence</span>
+        <p>The pipeline is self-throttled and checkpointed (<code>build_dataset_full.py</code>), so it's safe to re-run periodically rather than once. MVP requirement: a scheduled job re-runs the pull (proposed monthly, adjustable) and the app picks up the new <code>dataset_full.json</code> on next deploy or read — no manual data entry. Exact scheduling mechanism (cron, GitHub Action, etc.) is an implementation decision, not a product requirement.</p>
+      </div>
+    </section>
+
+    <section id="features">
+      <h2><span class="num">5</span>Core features (MVP)</h2>
+      <div class="rule"></div>
+
+      <h3>5.1 Browse &amp; category navigation</h3>
+      <p>Top-level navigation by protein category: Whey, Plant, Pea, Casein, Collagen, plus an "All" view. Mirrors Cotina's Tops / Bottoms / Dresses pattern.</p>
+
+      <h3>5.2 Exhaustive filtering</h3>
+      <p>Filtering is a primary feature, not an afterthought — it should cover everything the dataset can support:</p>
+      <ul>
+        <li><strong>Ingredient — has / does not have</strong>, multi-select, searchable (e.g. "no sucralose," "contains stevia")</li>
+        <li><strong>Certification</strong> — multi-select across the six real certifiers (NSF Certified for Sport, NSF Contents Certified, Informed Sport, Informed Choice, USP Verified, BSCG), plus an explicit "no independent certification" option</li>
+        <li><strong>Category</strong> (protein type)</li>
+        <li><strong>Brand</strong> — multi-select</li>
+        <li><strong>Allergens</strong> — exclude by allergen (milk, soy, egg, wheat, etc.)</li>
+        <li><strong>Flags</strong> — artificial sweetener present, proprietary blend present, on-market only</li>
+        <li><strong>Macros</strong> — protein % by weight range, calories range (stretch — see <a href="#arch">§8</a> for whether this ships in MVP or v1.1)</li>
+      </ul>
+      <p>Filters combine with <strong>AND</strong> logic across categories (e.g. "Whey" AND "no artificial sweetener" AND "NSF Certified for Sport") and <strong>OR</strong> logic within a single filter's selections (e.g. "NSF Certified for Sport" OR "USP Verified").</p>
+
+      <h3>5.3 Search</h3>
+      <p>Full-text search by brand or product name, usable alongside filters (matches Cotina's separate search entry point).</p>
+
+      <h3>5.4 Product grid</h3>
+      <p>Card view: product photo (<a href="#photos">§5.7</a>), brand, product name, category, protein % by weight, and a trust badge (certified / claims-only-no-cert / neither) so the headline signal is visible without opening the product.</p>
+
+      <h3>5.5 Product detail page</h3>
+      <ul>
+        <li>Photo, brand, name, category, serving size</li>
+        <li>Full macro panel</li>
+        <li>Full ingredient list, each ingredient tagged with its taxonomy category</li>
+        <li>Allergen declarations</li>
+        <li><strong>Trust section</strong> — see <a href="#trust">§6</a>, this is the differentiating feature and should be visually prominent, not buried</li>
+        <li>Link to the DSLD source label (always available — this is real data we already have)</li>
+        <li>"Get this product" button — MVP behavior is a disabled/stub state (<a href="#gaps">§9</a>)</li>
+        <li>Favorite toggle</li>
+      </ul>
+
+      <h3>5.6 Favorites</h3>
+      <p>Heart/favorite icon on cards and detail pages, matching Cotina. Session-scoped via browser storage (localStorage) — no account, no cross-device sync. The current session <em>is</em> the account.</p>
+
+      <h3 id="photos">5.7 Product photos</h3>
+      <p>Cotina sources real product photography; our DSLD dataset has none. MVP requirement: source a representative photo per product from the brand's own website where reasonably available, with a clean placeholder (e.g. a generic tub silhouette per category) when it isn't. This is a content-sourcing task, not just a UI one — see <a href="#gaps">§9</a> for scope and risk.</p>
+    </section>
+
+    <section id="trust">
+      <h2><span class="num">6</span>Trust &amp; certification presentation</h2>
+      <div class="rule"></div>
+      <p>This is the feature Cotina doesn't have, and the reason this product exists. The dataset already distinguishes two things that look identical on a label:</p>
+      <ul>
+        <li><strong>Real independent certification</strong> (<code>trust.certifications</code>) — a third party actually tested the product. Each certifier has a defined scope (e.g. NSF Certified for Sport and BSCG test every batch for banned substances; USP Verified confirms label accuracy but says nothing about banned substances; Informed Choice samples from retail rather than every batch). The UI should show <em>which</em> certifier and <em>what it actually covers</em>, not just a generic "certified" checkmark — collapsing that distinction is exactly the confusion this app exists to fix.</li>
+        <li><strong>Self-asserted claims</strong> (<code>trust.gmp_claimed</code>, <code>trust.fda_registration_claimed</code>, etc.) — printed on the label, true, and not verification of the product itself (FDA registration is a fact about a facility's address, not the product).</li>
+      </ul>
+      <p>Every product detail page must clearly show one of three states:</p>
+      <div class="badge-row">
+        <span class="badge verified">NSF CERTIFIED FOR SPORT</span>
+        <span class="badge claim">CLAIMS, NO VERIFICATION</span>
+        <span class="badge neutral">NO CLAIM EITHER WAY</span>
+      </div>
+      <ol>
+        <li><strong>Independently certified</strong> — badge naming the certifier(s) and, on hover/expand, what each one actually covers.</li>
+        <li><strong>Claims without verification</strong> (<code>implies_approval_without_verification</code>) — an explicit warning-style callout: "This label references FDA registration / GMP compliance but carries no independent certification." This is the pattern worth flagging and should not be visually softer than the "certified" state.</li>
+        <li><strong>Neither claimed nor certified</strong> — neutral, no claim either way.</li>
+      </ol>
+    </section>
+
+    <section id="ux">
+      <h2><span class="num">7</span>UX / design direction</h2>
+      <div class="rule"></div>
+      <p>Cotina is the direct visual reference: teal/warm gradient header, category nav bar, a filter row of dropdown chips above a clean product grid, expandable sections on the detail page, minimal chrome. The bar for MVP is "looks like a real, shipped consumer product" — not a spreadsheet with a UI bolted on, even though the backing data is a periodically-refreshed static dataset rather than a live inventory feed.</p>
+    </section>
+
+    <section id="arch">
+      <h2><span class="num">8</span>Technical architecture <span class="status-pill">proposed</span></h2>
+      <div class="rule"></div>
+      <ul>
+        <li><strong>Data layer</strong> — existing <code>label-lens</code> Python pipeline as source of truth. <code>dataset_full.json</code> is the canonical export the app reads from.</li>
+        <li><strong>Frontend/backend split</strong> — open implementation decision: a static-site generator reading the JSON at build time (simplest, matches "no accounts, no live writes") vs. a small API serving the same JSON. Recommend starting static; revisit if filtering performance or freshness needs push toward a live API.</li>
+        <li><strong>Filtering</strong> — client-side is very likely sufficient at 396 products; revisit if the dataset grows an order of magnitude.</li>
+        <li><strong>Favorites</strong> — browser localStorage, no backend persistence.</li>
+        <li><strong>Refresh pipeline</strong> — scheduled re-run of <code>build_dataset_full.py</code>, output redeployed. Mechanism (cron, GitHub Action, etc.) is an implementation detail, not specified here.</li>
+      </ul>
+    </section>
+
+    <section id="gaps">
+      <h2><span class="num">9</span>Known data gaps &amp; follow-up work</h2>
+      <div class="rule"></div>
+      <p>Called out explicitly because they change what "Get this product" and product photos can honestly do in MVP:</p>
+      <div class="box warn">
+        <span class="box-label">No real retailer links</span>
+        <p>The dataset has no Amazon / Whole Foods / iHerb URLs, and DSLD doesn't provide them. MVP ships the "Get this product" button as a stub — either disabled with a "link not available yet" tooltip, or a lightweight notification on click. Wiring this up for real is a separate, later data-matching project (matching 396 DSLD records to live retailer listings is nontrivial and out of scope here).</p>
+      </div>
+      <div class="box warn">
+        <span class="box-label">No product photography</span>
+        <p>Sourcing photos from brand websites per product is a real content task — likely a mix of scripted lookup and manual spot-checking, with a placeholder fallback required regardless of coverage achieved. Treat as a discrete work item, not a UI afterthought.</p>
+      </div>
+      <div class="box warn">
+        <span class="box-label">No price data</span>
+        <p>Out of scope for MVP entirely; not currently sourced from DSLD.</p>
+      </div>
+    </section>
+
+    <section id="future">
+      <h2><span class="num">10</span>Future scope <span class="status-pill">post-MVP</span></h2>
+      <div class="rule"></div>
+      <ul>
+        <li>Expand beyond protein powder into other consumer product categories (the original "for consumer products broadly" vision).</li>
+        <li>Real outbound retailer links once the data-matching problem is solved.</li>
+        <li>Price data, if a source is found.</li>
+        <li>Accounts with cross-device favorites.</li>
+        <li>Mobile app.</li>
+      </ul>
+    </section>
+
+    <section id="done">
+      <h2><span class="num">11</span>Success criteria / definition of done</h2>
+      <div class="rule"></div>
+      <ul>
+        <li>All 396 products across the 5 categories are browsable and every filter in <a href="#features">§5.2</a> works correctly against the real dataset.</li>
+        <li>Every product detail page correctly renders the three-state trust presentation from <a href="#trust">§6</a> with no false "certified" states (verified against the automated test suite's certification-detection tests).</li>
+        <li>Search and favorites work as specified.</li>
+        <li>The data refresh job runs on schedule and the app reflects a new pull without a code change.</li>
+        <li>A first-time visitor with no context can look at the site and describe what it's for and what makes it different from a generic supplement listing, without being told.</li>
+      </ul>
+    </section>
+
+    <footer>
+      Drafted through a structured requirements session referencing <a href="https://cotinashop.com" target="_blank" rel="noopener">Cotina</a> as a live UX example — category nav → filter bar → product grid → product detail → outbound "Take Me to Product Page" link — before mapping each piece onto the Label Lens data model. Source: <a href="https://github.com/P-bhandari/ingredient-scanner" target="_blank" rel="noopener">github.com/P-bhandari/ingredient-scanner</a>.
+    </footer>
+  </main>
+</div>
