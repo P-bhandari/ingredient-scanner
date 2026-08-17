@@ -1,0 +1,114 @@
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  --font-sans: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+}
+
+/* Map runtime theme variables (below) onto Tailwind color utilities, so
+   bg-paper / text-ink / etc. stay live across the light/dark toggle instead
+   of baking in a value at build time. */
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-raised: var(--paper-raised);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-verified: var(--verified);
+  --color-verified-bg: var(--verified-bg);
+  --color-claim: var(--claim);
+  --color-claim-bg: var(--claim-bg);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-code-bg: var(--code-bg);
+}
+
+:root {
+  --paper: #f4f5f1;
+  --paper-raised: #ffffff;
+  --ink: #171b1a;
+  --ink-soft: #4b5450;
+  --accent: #1f5c56;
+  --accent-soft: #e4ede9;
+  --verified: #3f7a56;
+  --verified-bg: #e8f1e9;
+  --claim: #a66a1e;
+  --claim-bg: #f5ead9;
+  --line: #d8dbd3;
+  --line-strong: #b9beb4;
+  --code-bg: #eceee8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #14171a;
+    --paper-raised: #1b1f21;
+    --ink: #e7e9e4;
+    --ink-soft: #a2a99f;
+    --accent: #6fb8ac;
+    --accent-soft: #1e2e2b;
+    --verified: #7cc499;
+    --verified-bg: #17271d;
+    --claim: #d99f4f;
+    --claim-bg: #2c2312;
+    --line: #2b302e;
+    --line-strong: #3c433f;
+    --code-bg: #1f2422;
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper: #14171a;
+  --paper-raised: #1b1f21;
+  --ink: #e7e9e4;
+  --ink-soft: #a2a99f;
+  --accent: #6fb8ac;
+  --accent-soft: #1e2e2b;
+  --verified: #7cc499;
+  --verified-bg: #17271d;
+  --claim: #d99f4f;
+  --claim-bg: #2c2312;
+  --line: #2b302e;
+  --line-strong: #3c433f;
+  --code-bg: #1f2422;
+}
+
+:root[data-theme="light"] {
+  --paper: #f4f5f1;
+  --paper-raised: #ffffff;
+  --ink: #171b1a;
+  --ink-soft: #4b5450;
+  --accent: #1f5c56;
+  --accent-soft: #e4ede9;
+  --verified: #3f7a56;
+  --verified-bg: #e8f1e9;
+  --claim: #a66a1e;
+  --claim-bg: #f5ead9;
+  --line: #d8dbd3;
+  --line-strong: #b9beb4;
+  --code-bg: #eceee8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  margin: 0;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
