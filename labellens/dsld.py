@@ -20,7 +20,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Iterator
 
-from .schema import Ingredient, Macros, Product, Serving, Trust
+from .schema import Certification, Certifier, Ingredient, Macros, Product, Serving, Trust
 from .taxonomy import categorise, looks_proprietary
 
 BASE = "https://api.ods.od.nih.gov/dsld/v9"
@@ -202,6 +202,7 @@ def _set_macro(macros: Macros, field: str, value: float | None, unit: str | None
 def parse_label(raw: dict) -> Product:
     """Turn a DSLD label payload into a Product."""
     serving_raw = (raw.get("servingSizes") or [{}])[0]
+    source_url = f"https://dsld.od.nih.gov/label/{raw['id']}"
 
     product = Product(
         dsld_id=int(raw["id"]),
@@ -219,7 +220,7 @@ def parse_label(raw: dict) -> Product:
             per_container=raw.get("servingsPerContainer"),
         ),
         target_groups=list(raw.get("targetGroups") or []),
-        source_url=f"https://dsld.od.nih.gov/label/{raw['id']}",
+        source_url=source_url,
     )
 
     # -- ingredients and macros -------------------------------------------
@@ -280,7 +281,7 @@ def parse_label(raw: dict) -> Product:
         )
 
     # -- statements: allergens and trust claims ---------------------------
-    product.trust = _parse_trust(raw.get("statements") or [])
+    product.trust = _parse_trust(raw.get("statements") or [], source_url)
     product.allergens = _parse_allergens(raw.get("statements") or [])
 
     contacts = raw.get("contacts") or []
@@ -292,14 +293,36 @@ def parse_label(raw: dict) -> Product:
     return product
 
 
-def _parse_trust(statements: list[dict]) -> Trust:
-    """
-    Extract self-asserted claims from label text.
+#: Certifier seal text -> Certifier. Matched against lowercased statement
+#: text (mainly "Seals/Symbols" rows, but the same wording often repeats in
+#: "General Statements"). These are trademarked program names printed
+#: verbatim on the label, not a fuzzy join against an external certifier
+#: list - see README for that separate, lower-confidence join.
+_CERTIFIER_PHRASES: list[tuple[str, Certifier]] = [
+    ("certified for sport", Certifier.NSF_CERTIFIED_FOR_SPORT),
+    ("nsf contents certified", Certifier.NSF_CONTENTS_CERTIFIED),
+    ("informed-sport", Certifier.INFORMED_SPORT),
+    ("informed sport", Certifier.INFORMED_SPORT),
+    ("informed-choice", Certifier.INFORMED_CHOICE),
+    ("informed choice", Certifier.INFORMED_CHOICE),
+    ("usp verified", Certifier.USP_VERIFIED),
+    ("bscg certified drug free", Certifier.BSCG),
+    ("banned substances control group", Certifier.BSCG),
+]
 
-    Everything here is a CLAIM. None of it is verification. Certifications are
-    joined separately from certifier lists - see README.
+
+def _parse_trust(statements: list[dict], source_url: str) -> Trust:
+    """
+    Extract trust signals from label statement text.
+
+    Two different things live here and must not be conflated: self-asserted
+    CLAIMS (fda_registration_claimed, gmp_claimed, ...) versus real
+    certifications detected from a trademarked seal name actually printed on
+    the label (e.g. "NSF Certified for Sport", "Informed-Choice.org"). Only
+    the latter populates `certifications` / `has_independent_verification`.
     """
     trust = Trust()
+    seen: set[Certifier] = set()
     for st in statements:
         text = (st.get("notes") or "").lower()
         stype = (st.get("type") or "").lower()
@@ -312,6 +335,13 @@ def _parse_trust(statements: list[dict]) -> Trust:
             trust.gmp_claimed = True
         if "third party tested" in text or "third-party tested" in text:
             trust.third_party_tested_claimed = True
+
+        for phrase, certifier in _CERTIFIER_PHRASES:
+            if phrase in text and certifier not in seen:
+                seen.add(certifier)
+                trust.certifications.append(
+                    Certification(certifier=certifier, source_url=source_url)
+                )
     return trust
 
 

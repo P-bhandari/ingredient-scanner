@@ -120,10 +120,18 @@ NAME_PATTERNS: dict[str, set[Category]] = {
     "lecithin": {Category.THICKENER_EMULSIFIER},
     "silicon dioxide": {Category.THICKENER_EMULSIFIER},
     "magnesium stearate": {Category.THICKENER_EMULSIFIER},
+    # DSLD lists this as "Gum Acacia"; same substance as "Gum Arabic" above,
+    # just reordered, so the existing pattern doesn't catch it.
+    "gum acacia": {Category.THICKENER_EMULSIFIER},
     # -- fillers ------------------------------------------------------------
     "inulin": {Category.FILLER_BULKING},
     "rice flour": {Category.FILLER_BULKING},
     "oat flour": {Category.FILLER_BULKING},
+    "corn starch": {Category.FILLER_BULKING},
+    "soluble fiber": {Category.FILLER_BULKING},
+    "insoluble fiber": {Category.FILLER_BULKING},
+    # Salt's chemical name - DSLD lists both interchangeably across labels.
+    "sodium chloride": {Category.FLAVOUR_COLOUR},
     # -- enzymes ------------------------------------------------------------
     "protease": {Category.DIGESTIVE_ENZYME},
     "lactase": {Category.DIGESTIVE_ENZYME},
@@ -132,6 +140,9 @@ NAME_PATTERNS: dict[str, set[Category]] = {
     "amylase": {Category.DIGESTIVE_ENZYME},
     "aminogen": {Category.DIGESTIVE_ENZYME},
     "digezyme": {Category.DIGESTIVE_ENZYME},
+    "alpha-galactosidase": {Category.DIGESTIVE_ENZYME},
+    "lipase": {Category.DIGESTIVE_ENZYME},
+    "cellulase": {Category.DIGESTIVE_ENZYME},
     # -- flavour / colour ---------------------------------------------------
     "natural flavor": {Category.FLAVOUR_COLOUR},
     "natural flavour": {Category.FLAVOUR_COLOUR},
@@ -257,6 +268,8 @@ DSLD_FALLBACK: dict[str, set[Category]] = {
     "amino acid": {Category.AMINO_ACID},
     "fat": {Category.MACRO},
     "sugar": {Category.MACRO},
+    "fiber": {Category.FILLER_BULKING},
+    "enzyme": {Category.DIGESTIVE_ENZYME},
     "botanical": {Category.OTHER},
     "complex carbohydrate": {Category.OTHER},
     "non-nutrient/non-botanical": {Category.OTHER},

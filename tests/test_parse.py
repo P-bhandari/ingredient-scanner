@@ -263,3 +263,66 @@ def test_certification_suppresses_misleading_flag() -> None:
         certifications=[Certification(certifier=Certifier.INFORMED_SPORT)],
     )
     assert trust.implies_approval_without_verification is False
+
+
+# ---------------------------------------------------------------------------
+# Certification detection from label statements
+#
+# parse_label() must actually populate `trust.certifications` when a real
+# seal is printed on the label, not just detect self-asserted claims. Text
+# below is taken verbatim from live DSLD labels (205264, 67269).
+# ---------------------------------------------------------------------------
+
+
+def test_nsf_certified_for_sport_detected_from_statements() -> None:
+    raw = {
+        "id": 205264,
+        "brandName": "Extreme Edge",
+        "fullName": "100% Pure Whey Protein Isolate",
+        "statements": [
+            {"type": "Seals/Symbols", "notes": "NSF\nCertified for Sport"},
+            {
+                "type": "General Statements: All Other Content",
+                "notes": "Tested Certified Safer with NSF Certified for Sport "
+                "Product tested for 200+ banned substances.",
+            },
+        ],
+    }
+    p = parse_label(raw)
+    assert p.trust.has_independent_verification is True
+    assert p.trust.batch_tested_for_banned_substances is True
+    # Two statements mention the same seal; must not double-count it.
+    assert len(p.trust.certifications) == 1
+    assert p.trust.certifications[0].certifier == Certifier.NSF_CERTIFIED_FOR_SPORT
+    assert p.trust.certifications[0].source_url == "https://dsld.od.nih.gov/label/205264"
+
+
+def test_informed_choice_detected_from_statements() -> None:
+    raw = {
+        "id": 67269,
+        "brandName": "GNC Pro Performance",
+        "fullName": "100% Casein Protein Chocolate Supreme",
+        "statements": [
+            {"type": "Seals/Symbols", "notes": "Informed-choice.org Trusted by sport"},
+        ],
+    }
+    p = parse_label(raw)
+    assert p.trust.has_independent_verification is True
+    assert p.trust.certifications[0].certifier == Certifier.INFORMED_CHOICE
+    # Informed Choice samples from retail rather than testing every batch.
+    assert p.trust.batch_tested_for_banned_substances is False
+
+
+def test_claims_without_a_seal_still_carry_no_certification() -> None:
+    """FDA/GMP language alone must not be mistaken for a certification."""
+    raw = {
+        "id": 1,
+        "brandName": "Brand",
+        "fullName": "Product",
+        "statements": [
+            {"type": "General Statements", "notes": "FDA registered and inspected GMP facility"},
+        ],
+    }
+    p = parse_label(raw)
+    assert p.trust.certifications == []
+    assert p.trust.implies_approval_without_verification is True
