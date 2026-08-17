@@ -36,7 +36,14 @@ export function ProductCard({ product }: { product: Product }) {
           {pct != null ? (
             <span className="font-mono text-[0.78rem] tabular-nums text-ink-soft">{pct}% protein</span>
           ) : (
-            <span />
+            // The label's serving isn't a weight (or contradicts its own
+            // macros), so there is no honest percentage to show.
+            <span
+              className="font-mono text-[0.72rem] text-ink-soft/70"
+              title="Serving size isn't declared by weight, so protein density can't be compared"
+            >
+              % n/a
+            </span>
           )}
           <TrustBadge trust={product.trust} size="sm" />
         </div>

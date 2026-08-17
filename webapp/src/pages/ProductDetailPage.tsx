@@ -3,9 +3,10 @@ import { Link, useParams } from 'react-router-dom'
 import { FavoriteButton } from '../components/FavoriteButton'
 import { ProductPhoto } from '../components/ProductPhoto'
 import { TrustDetail } from '../components/TrustBadge'
-import { proteinPctByWeight } from '../data/derived'
+import { allergenStatus, allergensFor, proteinPctByWeight } from '../data/derived'
 import { CATEGORY_LABELS, INGREDIENT_CATEGORY_LABELS, type Ingredient } from '../data/types'
 import { useDataset } from '../data/useDataset'
+import { useDocumentTitle } from '../useDocumentTitle'
 
 const MACRO_ROWS: Array<{ key: keyof import('../data/types').Macros; label: string; unit: string }> = [
   { key: 'calories', label: 'Calories', unit: '' },
@@ -57,17 +58,14 @@ function IngredientRow({ ingredient }: { ingredient: Ingredient }) {
 
 export function ProductDetailPage() {
   const { id } = useParams()
-  const { dataset, loading, error } = useDataset()
+  const { dataset } = useDataset()
   const [showStub, setShowStub] = useState(false)
 
-  if (loading) return <div className="mx-auto max-w-3xl px-6 py-16 text-ink-soft">Loading…</div>
-  if (error || !dataset) {
-    return (
-      <div className="mx-auto max-w-3xl px-6 py-16 text-claim">Couldn't load the dataset{error ? `: ${error}` : ''}.</div>
-    )
-  }
-
   const product = dataset.products.find((p) => p.dsld_id === Number(id))
+
+  // Called before any early return — hooks can't run conditionally.
+  useDocumentTitle(product ? `${product.name} — ${product.brand}` : 'Product not found')
+
   if (!product) {
     return (
       <div className="mx-auto max-w-3xl px-6 py-16">
@@ -80,6 +78,8 @@ export function ProductDetailPage() {
   }
 
   const pct = proteinPctByWeight(product)
+  const totalIngredients = product.ingredients.length + product.other_ingredients.length
+  const allergens = allergensFor(product)
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-8">
@@ -112,10 +112,30 @@ export function ProductDetailPage() {
                 </dd>
               </div>
             )}
-            {pct != null && (
+            {pct != null ? (
               <div>
                 <dt className="inline text-ink-soft">Protein by weight </dt>
-                <dd className="inline text-ink">{pct}%</dd>
+                <dd className="inline text-ink">
+                  {pct}%
+                  {product.protein_pct_basis === 'max_serving' && (
+                    <span
+                      className="ml-1 text-ink-soft"
+                      title="This label declares a serving range; the figure uses the upper bound, which is the basis its nutrition panel matches."
+                    >
+                      (max serving)
+                    </span>
+                  )}
+                </dd>
+              </div>
+            ) : (
+              <div>
+                <dt className="inline text-ink-soft">Protein by weight </dt>
+                <dd
+                  className="inline text-ink-soft"
+                  title="The serving isn't declared by weight, or the label's own figures are inconsistent."
+                >
+                  not comparable
+                </dd>
               </div>
             )}
             {product.manufacturer && (
@@ -200,34 +220,78 @@ export function ProductDetailPage() {
         </section>
       )}
 
-      <section className="mt-10">
-        <h2 className="mb-3 font-serif text-lg font-semibold text-ink">
-          Ingredients <span className="text-ink-soft">({product.ingredients.length})</span>
-        </h2>
-        <ul>
-          {product.ingredients.map((ing, i) => (
-            <IngredientRow key={i} ingredient={ing} />
-          ))}
-        </ul>
-      </section>
-
-      {product.other_ingredients.length > 0 && (
+      {/*
+        DSLD files a product's composition under `ingredients`, under
+        `otheringredients`, or splits it across both — 43% of records leave
+        the first list empty. Rendering a bare "Ingredients (0)" above the
+        real contents read as though we had no data, so the two are shown as
+        one list unless both are populated.
+      */}
+      {totalIngredients > 0 ? (
         <section className="mt-10">
-          <h2 className="mb-3 font-serif text-lg font-semibold text-ink">Other ingredients</h2>
+          <h2 className="mb-3 font-serif text-lg font-semibold text-ink">
+            Ingredients <span className="text-ink-soft">({totalIngredients})</span>
+          </h2>
           <ul>
+            {product.ingredients.map((ing, i) => (
+              <IngredientRow key={`i${i}`} ingredient={ing} />
+            ))}
+            {product.other_ingredients.length > 0 && product.ingredients.length > 0 && (
+              <li className="pt-3 font-mono text-[0.7rem] uppercase tracking-wide text-ink-soft">
+                Other ingredients
+              </li>
+            )}
             {product.other_ingredients.map((ing, i) => (
-              <IngredientRow key={i} ingredient={ing} />
+              <IngredientRow key={`o${i}`} ingredient={ing} />
             ))}
           </ul>
         </section>
-      )}
-
-      {product.allergens.length > 0 && (
+      ) : (
         <section className="mt-10">
-          <h2 className="mb-3 font-serif text-lg font-semibold text-ink">Allergens</h2>
-          <p className="text-[0.9rem] text-ink">{product.allergens.join(', ')}</p>
+          <h2 className="mb-3 font-serif text-lg font-semibold text-ink">Ingredients</h2>
+          <p className="text-[0.88rem] text-ink-soft">
+            No ingredient list is recorded for this label in the source database.
+          </p>
         </section>
       )}
+
+      <section className="mt-10">
+        <h2 className="mb-3 font-serif text-lg font-semibold text-ink">Allergens</h2>
+        {allergens.length > 0 ? (
+          <ul className="flex flex-wrap gap-2">
+            {allergens.map((a) => {
+              const status = allergenStatus(product, a)
+              return (
+                <li
+                  key={a}
+                  className="rounded-[3px] border border-claim/30 bg-claim-bg px-2.5 py-1 text-[0.82rem] text-claim"
+                >
+                  {a}
+                  <span className="ml-1.5 font-mono text-[0.68rem] uppercase tracking-wide opacity-80">
+                    {status === 'declared' ? 'declared' : 'inferred'}
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        ) : (
+          <p className="text-[0.88rem] text-ink-soft">No allergens declared or detected.</p>
+        )}
+
+        {/*
+          The distinction that makes this safe: silence in the source data is
+          not a claim of absence, and must never be presented as one.
+        */}
+        {product.allergen_declaration_missing && (
+          <p className="mt-3 border-l-2 border-claim bg-claim-bg px-3 py-2 text-[0.84rem] text-claim">
+            This label carries no allergen statement.{' '}
+            {product.allergens_detected.length > 0
+              ? 'The allergens above were inferred from the product name and ingredients.'
+              : 'Nothing was detected in its name or ingredients either — but absence of a statement is not a guarantee.'}{' '}
+            Check the physical packaging before relying on this.
+          </p>
+        )}
+      </section>
     </div>
   )
 }

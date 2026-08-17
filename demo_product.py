@@ -48,7 +48,7 @@ def show(p) -> None:
         if val is not None:
             print(f"    {label:<16} {val:>8}{unit}")
 
-    pct = m.protein_pct_by_weight(p.serving.quantity)
+    pct = p.protein_pct_by_weight
     print(f"\n    protein by weight   {pct}%")
     print(f"    protein per calorie {m.protein_per_calorie}")
 

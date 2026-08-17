@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from .schema import Certification, Certifier, Ingredient, Macros, NutrientPanelEntry, Product, Serving, Trust
-from .taxonomy import categorise, looks_proprietary
+from .taxonomy import categorise, detect_allergens, looks_proprietary
 
 BASE = "https://api.ods.od.nih.gov/dsld/v9"
 USER_AGENT = "label-lens/0.1 (research; DSLD via public API)"
@@ -258,6 +258,7 @@ def parse_label(raw: dict) -> Product:
         product_type=(raw.get("productType") or {}).get("langualCodeDescription"),
         serving=Serving(
             quantity=serving_raw.get("minQuantity"),
+            max_quantity=serving_raw.get("maxQuantity"),
             unit=serving_raw.get("unit"),
             note=serving_raw.get("notes"),
             per_container=raw.get("servingsPerContainer"),
@@ -336,6 +337,20 @@ def parse_label(raw: dict) -> Product:
     # -- statements: allergens and trust claims ---------------------------
     product.trust = _parse_trust(raw.get("statements") or [], source_url)
     product.allergens = _parse_allergens(raw.get("statements") or [])
+
+    # Allergens the ingredients imply, regardless of what the label declares.
+    detected: set[str] = set()
+    for ing in product.ingredients + product.other_ingredients:
+        detected |= detect_allergens(ing.name)
+
+    # ...and what the product name itself says. Several labels disclose no
+    # allergens and hide the source behind an opaque "Protein Blend" - the
+    # very pattern this project exists to surface - while the product is
+    # called "100% Casein Protein". A name is a weaker signal than an
+    # ingredient list, but "Whey Protein" containing whey is not a guess.
+    detected |= detect_allergens(product.name)
+
+    product.allergens_detected = sorted(detected)
 
     contacts = raw.get("contacts") or []
     if contacts:

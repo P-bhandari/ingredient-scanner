@@ -87,6 +87,8 @@ export interface NutrientPanelEntry {
 
 export interface Serving {
   quantity: number | null
+  /** Upper bound for range servings ("1-2 scoops"). */
+  max_quantity: number | null
   unit: string | null
   note: string | null
   per_container: string | null
@@ -106,15 +108,32 @@ export interface Product {
   ingredients: Ingredient[]
   other_ingredients: Ingredient[]
   nutrient_panel: NutrientPanelEntry[]
+  /** Allergens the label explicitly declares. */
   allergens: string[]
+  /** Allergens implied by the ingredient list (44% of labels declare none). */
+  allergens_detected: string[]
   target_groups: string[]
   trust: Trust
   manufacturer: string | null
   manufacturer_country: string | null
   source: string
   source_url: string | null
-  /** Added by webapp/scripts/prepare_data.py -- not part of the pydantic schema. */
+  // --- computed by webapp/scripts/prepare_data.py from the pydantic model ---
+  // Derived server-side so the client never has to guess what "1 Scoop"
+  // weighs, and so the data-quality gate can assert on the same values the
+  // site renders.
+
+  /** Not part of the pydantic schema; joined from the pipeline's selection. */
   category: ProteinCategory
+  /** null when no reliable figure exists (non-mass or inconsistent serving). */
+  protein_pct_by_weight: number | null
+  /** Which serving figure the percentage used. */
+  protein_pct_basis: 'declared' | 'max_serving' | null
+  serving_grams: number | null
+  /** Declared and detected, unioned. What filters act on. */
+  allergens_all: string[]
+  /** True when the label declares nothing — never read this as "free of". */
+  allergen_declaration_missing: boolean
 }
 
 export interface Dataset {

@@ -12,7 +12,21 @@ export function TagSearchInput({ options, selected, onChange, placeholder }: Tag
   const [text, setText] = useState('')
   const listId = useId()
 
-  const suggestions = useMemo(() => options.slice(0, 400), [options])
+  /**
+   * Filter by what's typed BEFORE capping. Capping first meant the datalist
+   * held only the alphabetically-first 400 of 1,336 ingredients, so Sucralose,
+   * Xanthan Gum and Stevia never appeared as suggestions — including for the
+   * field whose own placeholder reads "e.g. sucralose".
+   */
+  const suggestions = useMemo(() => {
+    const q = text.trim().toLowerCase()
+    const pool = q ? options.filter((o) => o.toLowerCase().includes(q)) : options
+    return pool.slice(0, 100)
+  }, [options, text])
+
+  const exactish = text.trim()
+    ? options.some((o) => o.toLowerCase().includes(text.trim().toLowerCase()))
+    : true
 
   function add(value: string) {
     const trimmed = value.trim()
@@ -44,6 +58,12 @@ export function TagSearchInput({ options, selected, onChange, placeholder }: Tag
           <option key={opt} value={opt} />
         ))}
       </datalist>
+
+      {!exactish && (
+        <p className="mt-1 text-[0.72rem] text-claim">
+          No ingredient matches “{text.trim()}” — check the spelling.
+        </p>
+      )}
 
       {selected.length > 0 && (
         <ul className="mt-2 flex flex-wrap gap-1.5">

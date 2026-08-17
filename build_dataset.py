@@ -521,7 +521,7 @@ if __name__ == "__main__":
     print()
     print(f"{'BRAND':<24}{'PRODUCT':<52}{'PROTEIN%':>9}{'CERT':>10}")
     for p in sorted(ds.products, key=lambda p: p.brand):
-        pct = p.macros.protein_pct_by_weight(p.serving.quantity)
+        pct = p.protein_pct_by_weight
         pct_s = f"{pct}%" if pct is not None else "n/a"
         cert = "yes" if p.trust.has_independent_verification else (
             "unverif." if p.trust.implies_approval_without_verification else "-")

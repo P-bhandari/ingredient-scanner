@@ -24,11 +24,17 @@ export function trustState(trust: Trust): TrustState {
   return 'neutral'
 }
 
+/**
+ * Protein as a percentage of serving weight, or null when no reliable figure
+ * exists. Computed in the pipeline (labellens/schema.py) rather than here, so
+ * one implementation is responsible for the unit handling and the data-quality
+ * gate can assert on exactly what the site renders.
+ *
+ * Do NOT reintroduce a client-side calculation from `serving.quantity` — that
+ * ignores the serving unit and is what produced "2500% protein by weight".
+ */
 export function proteinPctByWeight(product: Product): number | null {
-  const { protein_g } = product.macros
-  const servingQty = product.serving.quantity
-  if (protein_g == null || !servingQty) return null
-  return Math.round((100 * protein_g) / servingQty * 10) / 10
+  return product.protein_pct_by_weight
 }
 
 export function proteinPerCalorie(product: Product): number | null {
@@ -49,4 +55,29 @@ export function hasProprietaryBlend(product: Product): boolean {
 
 export function allIngredients(product: Product) {
   return [...product.ingredients, ...product.other_ingredients]
+}
+
+/**
+ * Allergens to filter and display on. Uses the declared + detected union,
+ * because 44% of labels declare nothing while still containing dairy.
+ */
+export function allergensFor(product: Product): string[] {
+  return product.allergens_all
+}
+
+export type AllergenStatus = 'declared' | 'detected' | 'undeclared'
+
+/**
+ * How we know about a given allergen — the distinction the UI must preserve.
+ * "Not declared" is never the same claim as "free of".
+ */
+export function allergenStatus(product: Product, allergen: string): AllergenStatus | null {
+  if (product.allergens.includes(allergen)) return 'declared'
+  if (product.allergens_detected.includes(allergen)) return 'detected'
+  return null
+}
+
+/** True when the label carries no allergen statement to rely on at all. */
+export function allergenDataMissing(product: Product): boolean {
+  return product.allergen_declaration_missing
 }

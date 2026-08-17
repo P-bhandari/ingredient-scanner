@@ -77,7 +77,8 @@ def test_mg_units_preserved(product) -> None:
 
 def test_protein_density(product) -> None:
     # 25g protein in a 32.5g scoop
-    assert product.macros.protein_pct_by_weight(product.serving.quantity) == 76.9
+    assert product.protein_pct_by_weight == 76.9
+    assert product.protein_pct_basis == "declared"
     assert product.macros.protein_per_calorie == pytest.approx(25 / 120, abs=1e-4)
 
 

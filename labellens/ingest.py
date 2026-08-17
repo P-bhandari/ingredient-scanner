@@ -72,18 +72,16 @@ def report(dataset: Dataset) -> str:
     ]
 
     live = [p for p in dataset.products if not p.off_market]
-    with_protein = [
-        p for p in live if p.macros.protein_g and p.serving.quantity
-    ]
+    with_protein = [p for p in live if p.protein_pct_by_weight is not None]
     if with_protein:
         ranked = sorted(
             with_protein,
-            key=lambda p: p.macros.protein_pct_by_weight(p.serving.quantity) or 0,
+            key=lambda p: p.protein_pct_by_weight or 0,
             reverse=True,
         )
         out += ["", "  HIGHEST PROTEIN BY WEIGHT"]
         for p in ranked[:8]:
-            pct = p.macros.protein_pct_by_weight(p.serving.quantity)
+            pct = p.protein_pct_by_weight
             out.append(
                 f"    {pct:>5.1f}%  {p.macros.protein_g:>5.1f}g  "
                 f"{p.brand[:20]:<20}  {p.name[:44]}"

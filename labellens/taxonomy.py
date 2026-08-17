@@ -325,6 +325,100 @@ def categorise(
     return {Category.OTHER}
 
 
+# ---------------------------------------------------------------------------
+# Allergen detection from ingredient names.
+#
+# DSLD's allergen statements are frequently absent - 44% of the protein-powder
+# catalogue declares nothing at all, including products whose ingredient list
+# literally reads "Milk" and "Lactose". An allergen filter that trusts only the
+# declaration therefore fails in the dangerous direction, so we also derive
+# allergens from the ingredients themselves.
+#
+# Two rules, learned from the real names in the data:
+#
+#   1. Match on word boundaries, never bare substrings. "lact" would catch
+#      Lactobacillus, Bifidobacterium lactis and Lactase - probiotics and an
+#      enzyme, not a milk declaration. Only lactose / lactalbumin /
+#      lactoglobulin are actual dairy markers.
+#   2. Some names carry an allergen word while belonging to a different
+#      allergen entirely. "Coconut Milk" is not dairy (coconut is a tree nut
+#      under FDA labelling); "Milk Thistle" is a botanical. The bare `milk`
+#      rule is suppressed when such a qualifier is present, while the
+#      unambiguous dairy markers below still fire on their own.
+#
+# Where a term is genuinely ambiguous we flag rather than stay silent: an
+# over-inclusive allergen filter costs a user options, an under-inclusive one
+# costs them a reaction.
+# ---------------------------------------------------------------------------
+
+#: allergen -> regex alternatives that unambiguously indicate it.
+_ALLERGEN_PATTERNS: dict[str, tuple[str, ...]] = {
+    "milk": (
+        r"whey",
+        r"casein",
+        r"caseinate",
+        r"lactose",
+        r"lactalbumin",
+        r"lactoglobulin",
+        r"dairy",
+    ),
+    "soy": (r"soy", r"soya", r"soybean"),
+    "egg": (r"egg", r"eggshell", r"albumen", r"ovalbumin"),
+    "wheat": (r"wheat", r"wheatgrass"),
+    "gluten": (r"gluten", r"barley", r"rye"),
+    "peanut": (r"peanut", r"arachis"),
+    "tree nut": (
+        r"almond",
+        r"cashew",
+        r"walnut",
+        r"pecan",
+        r"hazelnut",
+        r"pistachio",
+        r"macadamia",
+        r"brazil nut",
+        r"coconut",
+    ),
+    "fish": (r"fish", r"anchovy", r"salmon", r"cod", r"tilapia"),
+    "shellfish": (r"shellfish", r"crustacean", r"shrimp", r"crab", r"lobster", r"krill"),
+    "sesame": (r"sesame", r"tahini"),
+}
+
+#: `milk` also fires on the bare word, but only when no non-dairy qualifier is
+#: present - "Coconut Milk", "Almond Milk", "Oat Milk", "Milk Thistle".
+_NON_DAIRY_MILK = re.compile(
+    r"\b(coconut|almond|oat|soy|soya|rice|hemp|cashew|pea|flax|thistle)\b", re.IGNORECASE
+)
+
+
+def detect_allergens(name: str) -> set[str]:
+    """
+    Allergens implied by a single ingredient name.
+
+    Conservative by design - see the module note above. Returns an empty set
+    for names with no allergen signal, which is *not* the same as a claim that
+    the ingredient is allergen-free.
+    """
+    found: set[str] = set()
+    if not name:
+        return found
+
+    for allergen, patterns in _ALLERGEN_PATTERNS.items():
+        for pattern in patterns:
+            if re.search(rf"\b{pattern}", name, re.IGNORECASE):
+                found.add(allergen)
+                break
+
+    # Bare "milk", only when it isn't one of the plant milks.
+    if re.search(r"\bmilk", name, re.IGNORECASE) and not _NON_DAIRY_MILK.search(name):
+        found.add("milk")
+
+    # Wheat implies gluten; the reverse does not hold.
+    if "wheat" in found:
+        found.add("gluten")
+
+    return found
+
+
 def looks_proprietary(name: str, description: str | None = None) -> bool:
     """
     Proprietary blends hide per-ingredient doses, which is the mechanism behind
