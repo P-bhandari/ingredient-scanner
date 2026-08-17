@@ -1,0 +1,305 @@
+{
+  "id": 51157,
+  "fullName": "100% Hydrolyzed Whey Protein Alpine Vanilla",
+  "brandName": "NutraBio",
+  "upcSku": "6 49908 25541 1",
+  "servingsPerContainer": "70",
+  "offMarket": 0,
+  "entryDate": "2015-10-22",
+  "physicalState": { "langualCode": "E0162", "langualCodeDescription": "Powder" },
+  "productType": { "langualCode": "A1305", "langualCodeDescription": "Amino acid/Protein" },
+  "servingSizes": [
+    {
+      "order": 1,
+      "minQuantity": 32.5,
+      "maxQuantity": 32.5,
+      "minDailyServings": 1,
+      "maxDailyServings": 4,
+      "unit": "Gram(s)",
+      "notes": "1 scoop",
+      "inSFB": true
+    }
+  ],
+  "targetGroups": ["Adult (18 - 50 Years)", "Kosher", "Gluten Free"],
+  "contacts": [
+    {
+      "contactId": 7506,
+      "text": "Manufactured by",
+      "types": ["Manufacturer"],
+      "contactDetails": {
+        "id": 7506,
+        "name": "NutraBio Labs, Inc.",
+        "city": "Middlesex",
+        "state": "NJ ",
+        "country": "",
+        "webAddress": "www.nutrabio.com"
+      }
+    }
+  ],
+  "statements": [
+    {
+      "type": "General Statements: All Other Content",
+      "notes": "Quality and purity since 1996. NutraBio manufactures in our own FDA registered & inspected GMP facility complying with FDA 21 CFR Part 111 regulations."
+    },
+    {
+      "type": "General Statements: All Other Content",
+      "notes": "Manufactured in our GMP & FDA inspected facility\nFDA Registration: 16906175560"
+    },
+    { "type": "Precautions re: Allergies", "notes": "Allergens: Milk." },
+    { "type": "Formula re: Contains", "notes": "Allergens: Milk." },
+    {
+      "type": "Formula re: Kosher",
+      "notes": "Kosher, Soy Free, Gluten Free & BSE/TSE Free"
+    },
+    {
+      "type": "FDA Disclaimer Statement",
+      "notes": "These statements have not been evaluated by the Food and Drug Administration. This product is not intended to diagnose, treat, cure or prevent any disease."
+    },
+    { "type": "FDA Statement of Identity", "notes": "Dietary Supplement" }
+  ],
+  "ingredientRows": [
+    {
+      "order": 1,
+      "ingredientId": 284519,
+      "quantity": [
+        {
+          "servingSizeOrder": 1,
+          "servingSizeQuantity": 32.5,
+          "operator": "=",
+          "quantity": 120,
+          "unit": "{Calories}",
+          "dailyValueTargetGroup": [],
+          "servingSizeUnit": "Gram(s)"
+        }
+      ],
+      "nestedRows": [
+        {
+          "order": 2,
+          "ingredientId": 284522,
+          "quantity": [
+            { "quantity": 10, "unit": "{Calories}", "dailyValueTargetGroup": [] }
+          ],
+          "nestedRows": [],
+          "name": "Calories from Fat",
+          "category": "other",
+          "ingredientGroup": "Calories",
+          "uniiCode": "1"
+        }
+      ],
+      "name": "Calories",
+      "category": "other",
+      "ingredientGroup": "Calories",
+      "uniiCode": "1"
+    },
+    {
+      "order": 3,
+      "ingredientId": 12205,
+      "quantity": [
+        {
+          "quantity": 1.5,
+          "unit": "Gram(s)",
+          "dailyValueTargetGroup": [
+            { "name": "Adults and children 4 or more years of age", "percent": 2 }
+          ]
+        }
+      ],
+      "nestedRows": [
+        {
+          "order": 4,
+          "quantity": [
+            {
+              "quantity": 1,
+              "unit": "Gram(s)",
+              "dailyValueTargetGroup": [{ "percent": 4 }]
+            }
+          ],
+          "nestedRows": [],
+          "name": "Saturated Fat",
+          "category": "fat",
+          "ingredientGroup": "Saturated fat",
+          "uniiCode": null
+        }
+      ],
+      "name": "Total Fat",
+      "category": "fat",
+      "ingredientGroup": "Fat (unspecified)",
+      "uniiCode": null
+    },
+    {
+      "order": 5,
+      "quantity": [
+        { "quantity": 15, "unit": "mg", "dailyValueTargetGroup": [{ "percent": 4 }] }
+      ],
+      "nestedRows": [],
+      "name": "Cholesterol",
+      "category": "fat",
+      "ingredientGroup": "Cholesterol",
+      "uniiCode": null
+    },
+    {
+      "order": 6,
+      "quantity": [
+        { "quantity": 2, "unit": "Gram(s)", "dailyValueTargetGroup": [{ "percent": 1 }] }
+      ],
+      "nestedRows": [
+        {
+          "order": 7,
+          "quantity": [
+            {
+              "quantity": 2,
+              "unit": "Gram(s)",
+              "dailyValueTargetGroup": [{ "footnote": "Daily Value not established" }]
+            }
+          ],
+          "nestedRows": [],
+          "name": "Sugar",
+          "category": "sugar",
+          "ingredientGroup": "Sugar",
+          "uniiCode": "C151H8M554"
+        }
+      ],
+      "name": "Total Carbohydrates",
+      "category": "sugar",
+      "ingredientGroup": "Carbohydrate",
+      "uniiCode": "0"
+    },
+    {
+      "order": 8,
+      "quantity": [
+        { "quantity": 25, "unit": "Gram(s)", "dailyValueTargetGroup": [{ "percent": 50 }] }
+      ],
+      "nestedRows": [],
+      "name": "Protein",
+      "category": "protein",
+      "ingredientGroup": "Protein (unspecified)",
+      "uniiCode": null
+    },
+    {
+      "order": 9,
+      "quantity": [
+        { "quantity": 15, "unit": "mg", "dailyValueTargetGroup": [{ "percent": 2 }] }
+      ],
+      "nestedRows": [],
+      "name": "Calcium",
+      "category": "mineral",
+      "ingredientGroup": "Calcium",
+      "uniiCode": "SY7Q814VUP",
+      "alternateNames": ["Ca"]
+    },
+    {
+      "order": 10,
+      "quantity": [
+        { "quantity": 60, "unit": "mg", "dailyValueTargetGroup": [{ "percent": 3 }] }
+      ],
+      "nestedRows": [
+        {
+          "order": 14,
+          "quantity": [{ "quantity": 610, "unit": "mg", "dailyValueTargetGroup": [] }],
+          "nestedRows": [],
+          "name": "natural Vanilla flavor",
+          "category": "botanical",
+          "ingredientGroup": "Vanilla",
+          "uniiCode": null
+        },
+        {
+          "order": 15,
+          "quantity": [{ "quantity": 100, "unit": "mg", "dailyValueTargetGroup": [] }],
+          "nestedRows": [],
+          "name": "Xanthan Gum",
+          "category": "complex carbohydrate",
+          "ingredientGroup": "Xanthan Gum",
+          "uniiCode": "TTV12P4NEE"
+        },
+        {
+          "order": 16,
+          "quantity": [{ "quantity": 68, "unit": "mg", "dailyValueTargetGroup": [] }],
+          "nestedRows": [],
+          "name": "Sucralose",
+          "category": "non-nutrient/non-botanical",
+          "ingredientGroup": "Sucralose",
+          "uniiCode": null
+        },
+        {
+          "order": 17,
+          "quantity": [{ "quantity": 65, "unit": "mg", "dailyValueTargetGroup": [] }],
+          "nestedRows": [],
+          "name": "Salt",
+          "category": "non-nutrient/non-botanical",
+          "ingredientGroup": "Salt (unspecified)",
+          "uniiCode": null
+        }
+      ],
+      "name": "Sodium",
+      "category": "mineral",
+      "ingredientGroup": "Sodium",
+      "uniiCode": "9NEZ333N27",
+      "alternateNames": ["Na"]
+    },
+    {
+      "order": 11,
+      "quantity": [
+        { "quantity": 20, "unit": "mg", "dailyValueTargetGroup": [{ "percent": 1 }] }
+      ],
+      "nestedRows": [],
+      "name": "Potassium",
+      "category": "mineral",
+      "ingredientGroup": "Potassium",
+      "uniiCode": "RWP5GA015D"
+    },
+    {
+      "order": 12,
+      "ingredientId": 135346,
+      "notes": "hydrolyzed Whey Protein (Form: instantized with Sunflower Lecithin) Note: CFM cross flow micro and ultra-filtered HWP. Cold processed. ",
+      "quantity": [
+        {
+          "quantity": 31.6,
+          "unit": "Gram(s)",
+          "dailyValueTargetGroup": [{ "footnote": "Daily Value not established" }]
+        }
+      ],
+      "nestedRows": [],
+      "name": "hydrolyzed Whey Protein",
+      "category": "protein",
+      "ingredientGroup": "Whey Protein",
+      "uniiCode": null,
+      "forms": [
+        {
+          "order": 1,
+          "prefix": "instantized with",
+          "name": "Sunflower Lecithin",
+          "category": "fat",
+          "ingredientGroup": "lecithin"
+        }
+      ]
+    },
+    {
+      "order": 13,
+      "quantity": [
+        {
+          "operator": "<",
+          "quantity": 1,
+          "unit": "Gram(s)",
+          "dailyValueTargetGroup": [{ "footnote": "Daily Value not established" }]
+        }
+      ],
+      "nestedRows": [],
+      "name": "Flavoring",
+      "category": "other",
+      "ingredientGroup": "Flavor",
+      "uniiCode": null
+    }
+  ],
+  "otheringredients": {
+    "text": null,
+    "ingredients": [
+      {
+        "order": 1,
+        "ingredientId": 284540,
+        "name": "Absolutely None",
+        "category": "other",
+        "ingredientGroup": "Header",
+        "uniiCode": "1"
+      }
+    ]
+  }
+}
