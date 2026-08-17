@@ -87,6 +87,13 @@ export function ProductDetailPage() {
         ‹ Back to browse
       </Link>
 
+      {product.off_market && (
+        <div className="mt-4 rounded border border-ink-soft/30 bg-code-bg px-4 py-2.5 text-[0.84rem] text-ink-soft">
+          <strong className="text-ink">Off market.</strong> This label has been withdrawn from the source
+          database — it may be discontinued, reformulated, or simply removed from active listing.
+        </div>
+      )}
+
       <div className="mt-4 flex flex-col gap-6 sm:flex-row">
         <ProductPhoto brand={product.brand} className="h-40 w-40 shrink-0 rounded-md text-4xl" />
 
@@ -146,6 +153,16 @@ export function ProductDetailPage() {
             )}
           </dl>
 
+          {/*
+            The reason this product exists, given the same visual weight as
+            the header rather than filed as one more section to scroll to —
+            a "Claims, no verification" callout that only shows up after
+            Nutrition and Ingredients has already lost the argument.
+          */}
+          <div className="mt-4 rounded-md border border-line bg-paper-raised p-3.5">
+            <TrustDetail trust={product.trust} />
+          </div>
+
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button
               type="button"
@@ -172,11 +189,6 @@ export function ProductDetailPage() {
           )}
         </div>
       </div>
-
-      <section className="mt-10">
-        <h2 className="mb-3 font-serif text-lg font-semibold text-ink">Trust &amp; certification</h2>
-        <TrustDetail trust={product.trust} />
-      </section>
 
       <section className="mt-10">
         <h2 className="mb-3 font-serif text-lg font-semibold text-ink">Nutrition (per serving)</h2>

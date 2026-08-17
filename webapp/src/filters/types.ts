@@ -34,7 +34,11 @@ export const EMPTY_FILTERS: Filters = {
   requireAllergenDeclaration: false,
   noArtificialSweetener: false,
   noProprietaryBlend: false,
-  onMarketOnly: false,
+  // Off-market is 33% of the catalogue (130/396) and easy to miss behind a
+  // small corner badge. Hiding it by default, with an explicit opt-in to see
+  // it, matches what "browsing products" should mean; "onMarketOnly" is the
+  // baseline, not a deviation from it.
+  onMarketOnly: true,
   minProteinPct: null,
   sort: 'trust',
 }
@@ -58,7 +62,9 @@ export function isEmpty(filters: Filters): boolean {
     filters.requireAllergenDeclaration === false &&
     filters.noArtificialSweetener === false &&
     filters.noProprietaryBlend === false &&
-    filters.onMarketOnly === false &&
+    // true is the default (hide off-market); false is the deviation, since
+    // a user had to explicitly opt back in to see discontinued products.
+    filters.onMarketOnly === true &&
     filters.minProteinPct == null
   )
 }
@@ -75,7 +81,7 @@ export function activeCount(filters: Filters): number {
     (filters.requireAllergenDeclaration ? 1 : 0) +
     (filters.noArtificialSweetener ? 1 : 0) +
     (filters.noProprietaryBlend ? 1 : 0) +
-    (filters.onMarketOnly ? 1 : 0) +
+    (filters.onMarketOnly === false ? 1 : 0) +
     (filters.minProteinPct != null ? 1 : 0)
   )
 }
@@ -118,7 +124,10 @@ export function filtersFromParams(sp: URLSearchParams): Filters {
     requireAllergenDeclaration: sp.get('declaredOnly') === '1',
     noArtificialSweetener: sp.get('noSweetener') === '1',
     noProprietaryBlend: sp.get('noBlend') === '1',
-    onMarketOnly: sp.get('onMarket') === '1',
+    // Default true (hide off-market); "includeOffMarket=1" is the explicit
+    // opt-out, so an ordinary URL with no filters applied doesn't need to
+    // carry a param just to express the default.
+    onMarketOnly: sp.get('includeOffMarket') !== '1',
     minProteinPct: parsedMin != null && Number.isFinite(parsedMin) ? parsedMin : null,
     sort: sort && SORT_KEYS.includes(sort) ? sort : 'trust',
   }
@@ -142,7 +151,7 @@ export function applyFiltersToParams(filters: Filters, base: URLSearchParams): U
   setFlag(next, 'declaredOnly', filters.requireAllergenDeclaration)
   setFlag(next, 'noSweetener', filters.noArtificialSweetener)
   setFlag(next, 'noBlend', filters.noProprietaryBlend)
-  setFlag(next, 'onMarket', filters.onMarketOnly)
+  setFlag(next, 'includeOffMarket', filters.onMarketOnly === false)
 
   if (filters.minProteinPct != null && Number.isFinite(filters.minProteinPct)) {
     next.set('minProtein', String(filters.minProteinPct))

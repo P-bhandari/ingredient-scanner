@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ProductCard } from '../components/ProductCard'
-import { FilterBar, type FacetCounts } from '../components/FilterBar'
+import { FilterPanel } from '../components/FilterPanel'
+import type { FacetCounts } from '../components/FilterBar'
 import { allIngredients } from '../data/derived'
 import { CATEGORY_LABELS, type ProteinCategory } from '../data/types'
 import { useDataset } from '../data/useDataset'
@@ -111,12 +112,13 @@ export function BrowsePage() {
 
   return (
     <div className="mx-auto max-w-6xl gap-8 px-6 py-8 sm:flex sm:items-start">
-      <FilterBar
+      <FilterPanel
         filters={filters}
         onChange={setFilters}
         ingredientOptions={ingredientOptions}
         brandOptions={brandOptions}
         counts={counts}
+        resultCount={results.length}
       />
 
       <div className="min-w-0 flex-1">
@@ -143,7 +145,16 @@ export function BrowsePage() {
           </div>
         </div>
 
-        <ActiveFilterChips filters={filters} query={query} onChange={setFilters} />
+        <ActiveFilterChips
+          filters={filters}
+          query={query}
+          onChange={setFilters}
+          onClearSearch={() => {
+            const next = new URLSearchParams(searchParams)
+            next.delete('q')
+            setSearchParams(next, { replace: true })
+          }}
+        />
 
         {results.length === 0 ? (
           <EmptyState filters={filters} scopedCount={scoped.length} onChange={setFilters} />
@@ -170,10 +181,12 @@ function ActiveFilterChips({
   filters,
   query,
   onChange,
+  onClearSearch,
 }: {
   filters: Filters
   query: string
   onChange: (f: Filters) => void
+  onClearSearch: () => void
 }) {
   const chips: Array<{ label: string; clear: () => void }> = []
 
@@ -209,7 +222,8 @@ function ActiveFilterChips({
     chips.push({ label: 'no artificial sweetener', clear: () => onChange({ ...filters, noArtificialSweetener: false }) })
   if (filters.noProprietaryBlend)
     chips.push({ label: 'no proprietary blend', clear: () => onChange({ ...filters, noProprietaryBlend: false }) })
-  if (filters.onMarketOnly) chips.push({ label: 'on market', clear: () => onChange({ ...filters, onMarketOnly: false }) })
+  if (filters.onMarketOnly === false)
+    chips.push({ label: 'including off-market', clear: () => onChange({ ...filters, onMarketOnly: true }) })
   if (filters.requireAllergenDeclaration)
     chips.push({ label: 'declared allergens only', clear: () => onChange({ ...filters, requireAllergenDeclaration: false }) })
   if (filters.minProteinPct != null)
@@ -220,9 +234,15 @@ function ActiveFilterChips({
   return (
     <div className="mb-4 flex flex-wrap items-center gap-1.5">
       {query && (
-        <span className="rounded-[3px] border border-line-strong bg-code-bg px-2 py-1 font-mono text-[0.7rem] text-ink-soft">
+        <button
+          type="button"
+          onClick={onClearSearch}
+          className="inline-flex items-center gap-1 rounded-[3px] border border-line-strong bg-code-bg px-2 py-1 font-mono text-[0.7rem] text-ink-soft hover:border-accent hover:text-accent"
+        >
           search: “{query}”
-        </span>
+          <span aria-hidden>×</span>
+          <span className="sr-only">Clear search</span>
+        </button>
       )}
       {chips.map((c) => (
         <button

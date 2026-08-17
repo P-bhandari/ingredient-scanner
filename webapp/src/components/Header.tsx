@@ -1,23 +1,50 @@
-import { useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { useDataset } from '../data/useDataset'
 import { CATEGORY_LABELS, type ProteinCategory } from '../data/types'
 import { useFavorites } from '../favorites/useFavorites'
 
 const CATEGORIES: ProteinCategory[] = ['whey', 'plant', 'pea', 'casein', 'collagen']
 
 export function Header() {
-  const [searchParams] = useSearchParams()
-  const navigate = useNavigate()
+  const { dataset } = useDataset()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { favoriteIds } = useFavorites()
   const activeCategory = searchParams.get('category')
   const showingFavorites = searchParams.get('favorites') === '1'
-  const [query, setQuery] = useState(searchParams.get('q') ?? '')
+  const urlQuery = searchParams.get('q') ?? ''
+  const [query, setQuery] = useState(urlQuery)
 
-  function submitSearch(e: React.FormEvent) {
-    e.preventDefault()
-    const next = new URLSearchParams()
-    if (query.trim()) next.set('q', query.trim())
-    navigate(`/?${next.toString()}`)
+  // Sets expectations before the click, and shows the shape of the catalogue
+  // for free — "Whey (150)" tells a visitor something "Whey" alone doesn't.
+  const categoryCounts = useMemo(() => {
+    const counts: Partial<Record<ProteinCategory, number>> = {}
+    for (const p of dataset.products) counts[p.category] = (counts[p.category] ?? 0) + 1
+    return counts
+  }, [dataset])
+
+  // Keeps the input in sync when `q` changes from outside this component —
+  // clearing it via the chip on the results page, or a link that resets to "/".
+  useEffect(() => {
+    setQuery((current) => (current === urlQuery ? current : urlQuery))
+  }, [urlQuery])
+
+  // Live, not submit-on-Enter: filtering 396 products is fast enough that
+  // requiring a keypress just adds friction. Reads the latest params via the
+  // functional updater so a search doesn't clobber a category or filter
+  // selection made moments earlier — the previous version replaced the
+  // entire query string, which lost category context on every search.
+  function updateQuery(value: string) {
+    setQuery(value)
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        if (value.trim()) next.set('q', value.trim())
+        else next.delete('q')
+        return next
+      },
+      { replace: true },
+    )
   }
 
   return (
@@ -30,14 +57,26 @@ export function Header() {
           <span className="font-serif text-xl font-semibold text-ink">Label Lens</span>
         </Link>
 
-        <form onSubmit={submitSearch} className="order-last w-full sm:order-none sm:w-64">
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search brand or product…"
-            className="w-full rounded border border-line-strong bg-paper px-3 py-1.5 text-sm text-ink placeholder:text-ink-soft focus:border-accent focus:outline-none"
-          />
+        <form onSubmit={(e) => e.preventDefault()} className="order-last w-full sm:order-none sm:w-64">
+          <div className="relative">
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => updateQuery(e.target.value)}
+              placeholder="Search brand or product…"
+              className="w-full rounded border border-line-strong bg-paper px-3 py-1.5 text-sm text-ink placeholder:text-ink-soft focus:border-accent focus:outline-none"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => updateQuery('')}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-soft hover:text-ink"
+              >
+                ×
+              </button>
+            )}
+          </div>
         </form>
 
         <Link
@@ -59,7 +98,7 @@ export function Header() {
               : 'text-ink-soft hover:bg-code-bg hover:text-ink'
           }`}
         >
-          All
+          All <span className="opacity-70">({dataset.products.length})</span>
         </Link>
         {CATEGORIES.map((cat) => (
           <Link
@@ -71,7 +110,7 @@ export function Header() {
                 : 'text-ink-soft hover:bg-code-bg hover:text-ink'
             }`}
           >
-            {CATEGORY_LABELS[cat]}
+            {CATEGORY_LABELS[cat]} <span className="opacity-70">({categoryCounts[cat] ?? 0})</span>
           </Link>
         ))}
       </nav>

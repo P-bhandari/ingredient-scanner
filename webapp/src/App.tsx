@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Route, Routes, useLocation } from 'react-router-dom'
+import { Footer } from './components/Footer'
 import { Header } from './components/Header'
 import { BrowsePage } from './pages/BrowsePage'
 import { ProductDetailPage } from './pages/ProductDetailPage'
@@ -19,7 +20,7 @@ function ScrollToTop() {
 
 export default function App() {
   return (
-    <div className="min-h-screen bg-paper">
+    <div className="flex min-h-screen flex-col bg-paper">
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-accent focus:px-3 focus:py-2 focus:text-paper-raised"
@@ -28,12 +29,13 @@ export default function App() {
       </a>
       <ScrollToTop />
       <Header />
-      <main id="main">
+      <main id="main" className="flex-1">
         <Routes>
           <Route path="/" element={<BrowsePage />} />
           <Route path="/product/:id" element={<ProductDetailPage />} />
         </Routes>
       </main>
+      <Footer />
     </div>
   )
 }

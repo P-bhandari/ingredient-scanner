@@ -1,4 +1,5 @@
 import { CERTIFIER_LABELS, type Certifier } from '../data/types'
+import { useSectionOpen } from '../filters/useSectionOpen'
 import { EMPTY_FILTERS, isEmpty, type Filters, type MatchMode } from '../filters/types'
 import { TagSearchInput } from './TagSearchInput'
 
@@ -20,12 +21,60 @@ export interface FacetCounts {
   flags: Record<string, number>
 }
 
-function Section({ title, children, hint }: { title: string; children: React.ReactNode; hint?: string }) {
+/**
+ * Collapsible, with state remembered in localStorage per section (see
+ * useSectionOpen). A user who never touches "Brand" should get to close it
+ * once and have it stay closed on their next visit.
+ */
+function Section({
+  title,
+  children,
+  hint,
+  defaultOpen = true,
+  activeSummary,
+}: {
+  title: string
+  children: React.ReactNode
+  hint?: string
+  defaultOpen?: boolean
+  /** Short summary shown next to the title when the section is collapsed and has an active selection, e.g. "2 selected". */
+  activeSummary?: string
+}) {
+  const [open, toggle] = useSectionOpen(title, defaultOpen)
+
   return (
-    <div className="border-b border-line py-4 first:pt-0 last:border-0">
-      <h3 className="mb-1 font-mono text-[0.72rem] uppercase tracking-[0.08em] text-ink-soft">{title}</h3>
-      {hint && <p className="mb-2 text-[0.72rem] leading-snug text-ink-soft/80">{hint}</p>}
-      <div className={hint ? '' : 'mt-2.5'}>{children}</div>
+    <div className="border-b border-line py-1 first:pt-0 last:border-0">
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-2 py-2 text-left"
+      >
+        <span className="flex items-center gap-2">
+          <h3 className="font-mono text-[0.72rem] uppercase tracking-[0.08em] text-ink-soft">{title}</h3>
+          {!open && activeSummary && (
+            <span className="rounded-full bg-accent-soft px-1.5 py-0.5 font-mono text-[0.64rem] text-accent">
+              {activeSummary}
+            </span>
+          )}
+        </span>
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 12 12"
+          fill="none"
+          className={`shrink-0 text-ink-soft transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
+          aria-hidden
+        >
+          <path d="M2.5 4.5 6 8l3.5-3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <div className="pb-3">
+          {hint && <p className="mb-2 text-[0.72rem] leading-snug text-ink-soft/80">{hint}</p>}
+          {children}
+        </div>
+      )}
     </div>
   )
 }
@@ -79,13 +128,16 @@ function Checkbox({
         className="h-3.5 w-3.5 accent-accent"
       />
       <span className="flex-1">{label}</span>
-      {count != null && (
-        <span className="font-mono text-[0.72rem] tabular-nums text-ink-soft">{count}</span>
-      )}
+      {count != null && <span className="font-mono text-[0.72rem] tabular-nums text-ink-soft">{count}</span>}
     </label>
   )
 }
 
+/**
+ * The filter controls only — no outer chrome. Rendered inside a sticky
+ * sidebar on desktop and a drawer sheet on mobile (see FilterPanel), so this
+ * component stays agnostic to which one it's in.
+ */
 export function FilterBar({
   filters,
   onChange,
@@ -108,8 +160,8 @@ export function FilterBar({
   }
 
   return (
-    <aside className="w-full shrink-0 sm:w-64">
-      <div className="flex items-center justify-between pb-3">
+    <div>
+      <div className="flex items-center justify-between pb-2">
         <span className="font-mono text-[0.72rem] uppercase tracking-[0.08em] text-ink-soft">Filters</span>
         {!isEmpty(filters) && (
           <button
@@ -122,7 +174,10 @@ export function FilterBar({
         )}
       </div>
 
-      <Section title="Has ingredient">
+      <Section
+        title="Has ingredient"
+        activeSummary={filters.includeIngredients.length ? `${filters.includeIngredients.length}` : undefined}
+      >
         <MatchModeToggle
           value={filters.ingredientMatchMode}
           onChange={(m) => patch({ ingredientMatchMode: m })}
@@ -135,7 +190,10 @@ export function FilterBar({
         />
       </Section>
 
-      <Section title="Does not have ingredient">
+      <Section
+        title="Does not have ingredient"
+        activeSummary={filters.excludeIngredients.length ? `${filters.excludeIngredients.length}` : undefined}
+      >
         <TagSearchInput
           options={ingredientOptions}
           selected={filters.excludeIngredients}
@@ -146,6 +204,7 @@ export function FilterBar({
 
       <Section
         title="Certification"
+        activeSummary={filters.certifiers.length ? `${filters.certifiers.length}` : undefined}
         hint={
           filters.certMatchMode === 'all'
             ? 'Match all: products carrying every certification you select.'
@@ -172,7 +231,7 @@ export function FilterBar({
         </div>
       </Section>
 
-      <Section title="Brand">
+      <Section title="Brand" defaultOpen={false} activeSummary={filters.brands.length ? `${filters.brands.length}` : undefined}>
         <TagSearchInput
           options={brandOptions}
           selected={filters.brands}
@@ -183,6 +242,7 @@ export function FilterBar({
 
       <Section
         title="Exclude allergen"
+        activeSummary={filters.excludeAllergens.length ? `${filters.excludeAllergens.length}` : undefined}
         hint="Uses declared allergens plus any detected in the ingredient list."
       >
         {ALLERGENS.map((a) => (
@@ -230,7 +290,7 @@ export function FilterBar({
         />
       </Section>
 
-      <Section title="Min. protein by weight">
+      <Section title="Min. protein by weight" defaultOpen={false} activeSummary={filters.minProteinPct != null ? `≥${filters.minProteinPct}%` : undefined}>
         <div className="flex items-center gap-2">
           <input
             type="number"
@@ -245,6 +305,6 @@ export function FilterBar({
           <span className="text-[0.82rem] text-ink-soft">%</span>
         </div>
       </Section>
-    </aside>
+    </div>
   )
 }

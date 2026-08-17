@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { proteinPctByWeight } from '../data/derived'
+import { proteinPctByWeight, trustState } from '../data/derived'
 import { CATEGORY_LABELS, type Product } from '../data/types'
 import { FavoriteButton } from './FavoriteButton'
 import { ProductPhoto } from './ProductPhoto'
@@ -7,11 +7,18 @@ import { TrustBadge } from './TrustBadge'
 
 export function ProductCard({ product }: { product: Product }) {
   const pct = proteinPctByWeight(product)
+  // Most of the catalogue carries no certification claim at all — showing a
+  // badge for that on every card makes badges mean nothing. Only the two
+  // states worth a second look (verified, or claiming without verification)
+  // get one; silence is the default.
+  const showBadge = trustState(product.trust) !== 'neutral'
 
   return (
     <Link
       to={`/product/${product.dsld_id}`}
-      className="group flex flex-col overflow-hidden rounded-md border border-line bg-paper-raised transition-shadow hover:shadow-[0_2px_14px_rgba(0,0,0,0.06)]"
+      className={`group flex flex-col overflow-hidden rounded-md border border-line bg-paper-raised transition-shadow hover:shadow-[0_2px_14px_rgba(0,0,0,0.06)] ${
+        product.off_market ? 'opacity-55 hover:opacity-90' : ''
+      }`}
     >
       <div className="relative">
         <ProductPhoto brand={product.brand} className="aspect-square w-full text-3xl" />
@@ -19,7 +26,7 @@ export function ProductCard({ product }: { product: Product }) {
           <FavoriteButton dsldId={product.dsld_id} size="sm" />
         </div>
         {product.off_market && (
-          <span className="absolute left-2 top-2 rounded bg-paper-raised/90 px-1.5 py-0.5 font-mono text-[0.62rem] uppercase tracking-wide text-ink-soft backdrop-blur-sm">
+          <span className="absolute left-2 top-2 rounded bg-ink px-1.5 py-0.5 font-mono text-[0.62rem] uppercase tracking-wide text-paper-raised">
             Off market
           </span>
         )}
@@ -45,7 +52,7 @@ export function ProductCard({ product }: { product: Product }) {
               % n/a
             </span>
           )}
-          <TrustBadge trust={product.trust} size="sm" />
+          {showBadge && <TrustBadge trust={product.trust} size="sm" />}
         </div>
       </div>
     </Link>
