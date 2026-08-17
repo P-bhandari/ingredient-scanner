@@ -218,6 +218,21 @@ class Serving(BaseModel):
     per_container: str | None = None
 
 
+class NutrientPanelEntry(BaseModel):
+    """
+    A Nutrition Facts panel row that isn't one of Macros' named fields (e.g.
+    iron, zinc, vitamin D) - declared nutrient content, not an added
+    ingredient. Kept separate from `Ingredient` so panel data doesn't read as
+    "this was added to the product," which is the wrong claim for a row that
+    is just restating %DV of a naturally-occurring or fortified nutrient.
+    """
+
+    name: str
+    quantity: float | None = None
+    unit: str | None = None
+    percent_dv: float | None = None
+
+
 class Product(BaseModel):
     dsld_id: int
     brand: str
@@ -232,6 +247,7 @@ class Product(BaseModel):
     macros: Macros = Field(default_factory=Macros)
     ingredients: list[Ingredient] = Field(default_factory=list)
     other_ingredients: list[Ingredient] = Field(default_factory=list)
+    nutrient_panel: list[NutrientPanelEntry] = Field(default_factory=list)
 
     allergens: list[str] = Field(default_factory=list)
     target_groups: list[str] = Field(default_factory=list)

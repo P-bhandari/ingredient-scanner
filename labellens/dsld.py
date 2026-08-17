@@ -20,7 +20,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Iterator
 
-from .schema import Certification, Certifier, Ingredient, Macros, Product, Serving, Trust
+from .schema import Certification, Certifier, Ingredient, Macros, NutrientPanelEntry, Product, Serving, Trust
 from .taxonomy import categorise, looks_proprietary
 
 BASE = "https://api.ods.od.nih.gov/dsld/v9"
@@ -140,8 +140,10 @@ class DSLDClient:
 #: Matched on normalised DSLD `name`.
 _MACRO_FIELDS: dict[str, str] = {
     "calories": "calories",
+    "energy": "calories",
     "protein": "protein_g",
     "total fat": "total_fat_g",
+    "fat": "total_fat_g",
     "saturated fat": "saturated_fat_g",
     "cholesterol": "cholesterol_mg",
     "total carbohydrates": "total_carbs_g",
@@ -161,6 +163,47 @@ _MACRO_FIELDS: dict[str, str] = {
 #: thing in the tub.
 _PANEL_ONLY: frozenset[str] = frozenset(
     set(_MACRO_FIELDS) | {"calories from fat", "trans fat", "total sugars"}
+)
+
+#: The rest of the standard 21 CFR 101.9 Nutrition Facts panel - vitamins and
+#: minerals that don't have a dedicated Macros field. These are declared
+#: nutrient content, not something added to the product, so they must not
+#: land in `ingredients` either - see NutrientPanelEntry in schema.py. A
+#: plain "Iron" row is this; "Ferrous Fumarate" or "Zinc Oxide" (a named
+#: ingredient form) is not, so this matches on exact normalised name only,
+#: same as _MACRO_FIELDS above.
+_NUTRIENT_PANEL_NAMES: frozenset[str] = frozenset(
+    {
+        "vitamin a",
+        "vitamin c",
+        "vitamin d",
+        "vitamin d2",
+        "vitamin d3",
+        "vitamin e",
+        "vitamin k",
+        "vitamin k2",
+        "thiamin",
+        "thiamine",
+        "riboflavin",
+        "niacin",
+        "vitamin b6",
+        "folate",
+        "folic acid",
+        "vitamin b12",
+        "biotin",
+        "pantothenic acid",
+        "iron",
+        "zinc",
+        "phosphorus",
+        "magnesium",
+        "copper",
+        "manganese",
+        "chromium",
+        "molybdenum",
+        "chloride",
+        "iodine",
+        "selenium",
+    }
 )
 
 #: Units we normalise to. DSLD is inconsistent: "Gram(s)", "g", "mg", "mcg".
@@ -240,6 +283,16 @@ def parse_label(raw: dict) -> Product:
         # left Sodium and Calcium sitting in the ingredient list next to
         # sucralose. Inconsistent, and misleading to a reader.
         if norm in _PANEL_ONLY:
+            continue
+
+        # Same reasoning, for the rest of the Nutrition Facts panel: a plain
+        # "Iron" or "Vitamin D" row is declared nutrient content, not an
+        # added ingredient. Keep the data (NutrientPanelEntry) without
+        # letting it read as "this was added to the product."
+        if norm in _NUTRIENT_PANEL_NAMES:
+            product.nutrient_panel.append(
+                NutrientPanelEntry(name=name, quantity=qty, unit=unit, percent_dv=pct)
+            )
             continue
 
         unii = row.get("uniiCode")
@@ -352,14 +405,40 @@ _ALLERGEN_TERMS = (
 
 
 def _parse_allergens(statements: list[dict]) -> list[str]:
+    """
+    "Contains: Milk" and "manufactured in a facility that also processes
+    egg, wheat, soy..." look like the same kind of statement and are not: the
+    first is a declaration about this product, the second is a
+    cross-contact caution about the factory. A dedicated "Does NOT Contain" /
+    "Free of ..." statement is the more specific, authoritative claim, so it
+    overrides a same-named term surfaced by a vaguer facility warning -
+    without this, "Free of Egg, Fish, Crustacean Shellfish, Tree Nuts,
+    Peanuts, Wheat and Soybeans" (a real, observed label statement) is
+    silently outvoted by "...facility that also processes eggs, wheat...",
+    and every one of those allergens gets listed as present. Wrong in the
+    direction that matters most for this app.
+    """
     found: set[str] = set()
+    excluded: set[str] = set()
     for st in statements:
         stype = (st.get("type") or "").lower()
         text = (st.get("notes") or "").lower()
+
+        # A whole "does not contain" statement negates every term it names,
+        # regardless of where in the sentence it falls - "Free of Egg, Fish,
+        # Crustacean Shellfish..." names several allergens in one negative
+        # claim, not one negation per adjacent word.
+        if "does not contain" in stype or text.strip().startswith("free of"):
+            for term in _ALLERGEN_TERMS:
+                if term in text:
+                    excluded.add(term)
+            continue
+
         if "allerg" not in stype and "allergen" not in text:
             continue
-        # "Soy Free" / "Gluten Free" are the opposite of a warning
+        # "Soy Free" / "Gluten Free" are the opposite of a warning, in the
+        # same statement.
         for term in _ALLERGEN_TERMS:
             if term in text and f"{term} free" not in text and f"{term}-free" not in text:
                 found.add(term)
-    return sorted(found)
+    return sorted(found - excluded)

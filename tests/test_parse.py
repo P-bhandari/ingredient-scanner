@@ -227,6 +227,37 @@ def test_free_from_claims_not_read_as_allergens(product) -> None:
     assert "gluten" not in product.allergens
 
 
+def test_dedicated_free_of_statement_overrides_facility_warning() -> None:
+    """
+    Real statements from live label 205264: a "Does NOT Contain" declaration
+    naming several allergens in one negative claim must win over a vaguer
+    "manufactured in a facility that also processes ..." caution that names
+    the same allergens. Only the product's own "Contains: Milk" should
+    survive.
+    """
+    raw = {
+        "id": 205264,
+        "brandName": "Extreme Edge",
+        "fullName": "100% Pure Whey Protein Isolate",
+        "statements": [
+            {"type": "Precautions re: Allergies", "notes": "Contains: Milk"},
+            {
+                "type": "Formulation re: Does NOT Contain",
+                "notes": "Free of Egg, Fish, Crustacean Shellfish, Tree Nuts, Peanuts, "
+                "Wheat and Soybeans.\nAlso Free of Yeast, Gluten, Barley and Rice.",
+            },
+            {
+                "type": "Precautions re: Allergies",
+                "notes": "Allergen Warning: Manufactured in a facility that processes "
+                "products containing milk, eggs, soybeans, wheat, shellfish, fish oil, "
+                "tree nuts and peanut flavor.",
+            },
+        ],
+    }
+    p = parse_label(raw)
+    assert p.allergens == ["milk"]
+
+
 # ---------------------------------------------------------------------------
 # Certification scope model
 # ---------------------------------------------------------------------------
@@ -311,6 +342,66 @@ def test_informed_choice_detected_from_statements() -> None:
     assert p.trust.certifications[0].certifier == Certifier.INFORMED_CHOICE
     # Informed Choice samples from retail rather than testing every batch.
     assert p.trust.batch_tested_for_banned_substances is False
+
+
+# ---------------------------------------------------------------------------
+# Nutrition-panel rows that aren't in Macros (iron, vitamin D, ...)
+#
+# DSLD sometimes represents a product's entire ingredientRows as just the
+# Nutrition Facts panel (seen live on label 205264 - an "Extreme Edge" whey
+# isolate whose only "ingredients" were Calories/Protein/Iron/Phosphorus/
+# Magnesium/Copper/Chloride, with the real ingredients - cocoa, flavor,
+# lecithin, stevia - filed separately under otheringredients). A plain
+# "Iron" row is declared nutrient content, not something added to the tub,
+# and must not read as an ingredient.
+# ---------------------------------------------------------------------------
+
+
+def test_panel_micronutrients_excluded_from_ingredients_and_captured() -> None:
+    raw = {
+        "id": 205264,
+        "brandName": "Extreme Edge",
+        "fullName": "100% Pure Whey Protein Isolate",
+        "ingredientRows": [
+            {"name": "Protein", "category": "protein", "quantity": [{"quantity": 26, "unit": "Gram(s)"}]},
+            {"name": "Iron", "category": "mineral", "quantity": [{"quantity": 0.5, "unit": "mg"}]},
+            {"name": "Magnesium", "category": "mineral", "quantity": [{"quantity": 30, "unit": "mg"}]},
+        ],
+    }
+    p = parse_label(raw)
+    names = {i.name for i in p.ingredients}
+    assert "Iron" not in names
+    assert "Magnesium" not in names
+    assert p.macros.protein_g == 26
+
+    panel_names = {n.name: n for n in p.nutrient_panel}
+    assert panel_names["Iron"].quantity == 0.5
+    assert panel_names["Iron"].unit == "mg"
+    assert panel_names["Magnesium"].quantity == 30
+
+
+def test_named_mineral_ingredient_form_still_counts_as_ingredient() -> None:
+    """"Zinc Oxide" is a specific ingredient form actually added to the
+    product - unlike a bare "Zinc" panel row, it must stay an ingredient."""
+    raw = {
+        "id": 1,
+        "brandName": "Brand",
+        "fullName": "Product",
+        "ingredientRows": [
+            {"name": "Zinc Oxide", "category": "mineral", "uniiCode": "SOI2LOH54Z"},
+        ],
+    }
+    p = parse_label(raw)
+    assert "Zinc Oxide" in {i.name for i in p.ingredients}
+    assert p.nutrient_panel == []
+
+
+def test_sucralose_nested_under_sodium_still_an_ingredient(product) -> None:
+    """Regression guard: the panel-nutrient exclusion must not accidentally
+    swallow real ingredients that happen to be nested under a panel row due
+    to DSLD's data-entry quirks (see test_depth_recorded)."""
+    names = {i.name for i in product.ingredients}
+    assert "Sucralose" in names
 
 
 def test_claims_without_a_seal_still_carry_no_certification() -> None:
