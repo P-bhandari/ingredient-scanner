@@ -1,0 +1,18 @@
+[project]
+name = "label-lens"
+version = "0.1.0"
+description = "Protein powder label data with honest trust signals. Built on the NIH Dietary Supplement Label Database."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["pydantic>=2.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
