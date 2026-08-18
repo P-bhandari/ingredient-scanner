@@ -1,8 +1,25 @@
 // Mirrors labellens/schema.py. Kept in lockstep by hand -- the pipeline's
 // pydantic models are the source of truth; this is a read-only view of their
-// JSON serialization (data/dataset_full.json via prepare_data.py).
+// JSON serialization (data/dataset_supplements_full.json via
+// webapp/scripts/prepare_full_catalogue.py).
 
-export type ProteinCategory = 'whey' | 'plant' | 'pea' | 'casein' | 'collagen'
+// DSLD's own product_type classification (11 values across the full ~118k
+// corpus), not a hand-built taxonomy -- see prepare_full_catalogue.py for
+// why. "uncategorized" only exists as a safety net; the build fails loudly
+// if any real product actually lands there.
+export type ProductCategory =
+  | 'other_combinations'
+  | 'botanical'
+  | 'non_nutrient'
+  | 'botanical_with_nutrients'
+  | 'vitamin'
+  | 'amino_acid_protein'
+  | 'fat_fatty_acid'
+  | 'mineral'
+  | 'multivitamin_mineral'
+  | 'single_vitamin_mineral'
+  | 'fiber_other'
+  | 'uncategorized'
 
 export type IngredientCategory =
   | 'protein_source'
@@ -34,6 +51,8 @@ export type CertScope =
   | 'label_accuracy'
   | 'contaminants'
   | 'process_only'
+
+export type TrustState = 'verified' | 'claim-only' | 'neutral'
 
 export interface Certification {
   certifier: Certifier
@@ -94,6 +113,12 @@ export interface Serving {
   per_container: string | null
 }
 
+/**
+ * The full per-product record, one per shard file
+ * (public/data/shards/<id % 360>.json). Fetched lazily by the product detail
+ * page only -- at ~117,800 products this cannot be a JS-bundled or
+ * eagerly-fetched dataset the way the 396-product protein catalogue was.
+ */
 export interface Product {
   dsld_id: number
   brand: string
@@ -118,13 +143,10 @@ export interface Product {
   manufacturer_country: string | null
   source: string
   source_url: string | null
-  // --- computed by webapp/scripts/prepare_data.py from the pydantic model ---
-  // Derived server-side so the client never has to guess what "1 Scoop"
-  // weighs, and so the data-quality gate can assert on the same values the
-  // site renders.
-
-  /** Not part of the pydantic schema; joined from the pipeline's selection. */
-  category: ProteinCategory
+  // --- computed server-side by prepare_full_catalogue.py from the pydantic
+  // model, so the client never has to guess what "1 Scoop" weighs, and the
+  // data-quality gate can assert on the same values the site renders.
+  category: ProductCategory
   /** null when no reliable figure exists (non-mass or inconsistent serving). */
   protein_pct_by_weight: number | null
   /** Which serving figure the percentage used. */
@@ -136,12 +158,52 @@ export interface Product {
   allergen_declaration_missing: boolean
 }
 
-export interface Dataset {
+/**
+ * One row per product in public/data/index.json (~118k rows, ~60MB / ~7.6MB
+ * gzipped). Everything browsing, filtering, sorting, searching, and a
+ * product card need, precomputed at build time — flat fields rather than the
+ * nested nutrient/trust/ingredient structures on Product, both because most
+ * of that detail is irrelevant to a list view and because recomputing
+ * derived values (protein %, trust state, allergen union) from nested data
+ * on every filter keystroke across 118k rows is real, avoidable cost.
+ */
+export interface IndexRow {
+  id: number
+  brand: string
+  name: string
+  category: ProductCategory
+  offMarket: boolean
+  proteinPct: number | null
+  trustState: TrustState
+  certifiers: Certifier[]
+  /** Declared + detected allergens, unioned (same as Product.allergens_all). */
+  allergens: string[]
+  allergenDeclarationMissing: boolean
+  /** Flat ingredient names only (no categories/quantities — see Product for those). */
+  ingredientNames: string[]
+  hasArtificialSweetener: boolean
+  hasProprietaryBlend: boolean
+  /** Which shard file (public/data/shards/<shard>.json) holds the full Product. */
+  shard: number
+}
+
+export interface CatalogueMeta {
   generated: string
-  source_citation: string
+  sourceCitation: string
   licence: string
-  query: string
-  products: Product[]
+  productCount: number
+  shardCount: number
+}
+
+/**
+ * Autocomplete option lists (public/data/facets.json), precomputed at build
+ * time. Building these by scanning every ingredientNames array across
+ * ~117,800 index rows client-side blocked the main thread for tens of
+ * seconds — an aggregate over the whole corpus belongs in the batch build.
+ */
+export interface Facets {
+  ingredientNames: string[]
+  brands: string[]
 }
 
 export const CERTIFIER_LABELS: Record<Certifier, string> = {
@@ -160,12 +222,38 @@ export const CERT_SCOPE_LABELS: Record<CertScope, string> = {
   process_only: 'Manufacturing process reviewed',
 }
 
-export const CATEGORY_LABELS: Record<ProteinCategory, string> = {
-  whey: 'Whey',
-  plant: 'Plant',
-  pea: 'Pea',
-  casein: 'Casein',
-  collagen: 'Collagen',
+// Order here is nav order. "Other Combinations" is DSLD's largest single
+// bucket (~36% of the corpus, mixed multi-ingredient formulas that don't fit
+// its other categories) and is placed last deliberately -- it's real data,
+// but not what most people mean when they say "browse by category."
+export const CATEGORY_ORDER: ProductCategory[] = [
+  'vitamin',
+  'mineral',
+  'multivitamin_mineral',
+  'single_vitamin_mineral',
+  'amino_acid_protein',
+  'botanical',
+  'botanical_with_nutrients',
+  'fat_fatty_acid',
+  'fiber_other',
+  'non_nutrient',
+  'other_combinations',
+  'uncategorized',
+]
+
+export const CATEGORY_LABELS: Record<ProductCategory, string> = {
+  vitamin: 'Vitamins',
+  mineral: 'Minerals',
+  multivitamin_mineral: 'Multivitamin & Mineral',
+  single_vitamin_mineral: 'Single Vitamin or Mineral',
+  amino_acid_protein: 'Amino Acid / Protein',
+  botanical: 'Botanical',
+  botanical_with_nutrients: 'Botanical with Nutrients',
+  fat_fatty_acid: 'Fat / Fatty Acid',
+  fiber_other: 'Fiber & Other Nutrients',
+  non_nutrient: 'Non-Nutrient / Non-Botanical',
+  other_combinations: 'Other Combinations',
+  uncategorized: 'Uncategorized',
 }
 
 export const INGREDIENT_CATEGORY_LABELS: Record<IngredientCategory, string> = {

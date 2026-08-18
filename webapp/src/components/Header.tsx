@@ -1,13 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { useDataset } from '../data/useDataset'
-import { CATEGORY_LABELS, type ProteinCategory } from '../data/types'
+import { useCatalogue } from '../data/useCatalogue'
+import { CATEGORY_LABELS, CATEGORY_ORDER, type ProductCategory } from '../data/types'
 import { useFavorites } from '../favorites/useFavorites'
 
-const CATEGORIES: ProteinCategory[] = ['whey', 'plant', 'pea', 'casein', 'collagen']
-
 export function Header() {
-  const { dataset } = useDataset()
+  const { catalogue } = useCatalogue()
   const [searchParams, setSearchParams] = useSearchParams()
   const { favoriteIds } = useFavorites()
   const activeCategory = searchParams.get('category')
@@ -15,13 +13,18 @@ export function Header() {
   const urlQuery = searchParams.get('q') ?? ''
   const [query, setQuery] = useState(urlQuery)
 
+  const rows = catalogue?.rows ?? []
+
   // Sets expectations before the click, and shows the shape of the catalogue
-  // for free — "Whey (150)" tells a visitor something "Whey" alone doesn't.
+  // for free — "Vitamins (6,759)" tells a visitor something "Vitamins" alone
+  // doesn't. Categories with zero products (should only ever be the
+  // "uncategorized" safety-net bucket) are omitted rather than shown empty.
   const categoryCounts = useMemo(() => {
-    const counts: Partial<Record<ProteinCategory, number>> = {}
-    for (const p of dataset.products) counts[p.category] = (counts[p.category] ?? 0) + 1
+    const counts: Partial<Record<ProductCategory, number>> = {}
+    for (const row of rows) counts[row.category] = (counts[row.category] ?? 0) + 1
     return counts
-  }, [dataset])
+  }, [rows])
+  const visibleCategories = CATEGORY_ORDER.filter((c) => (categoryCounts[c] ?? 0) > 0)
 
   // Keeps the input in sync when `q` changes from outside this component —
   // clearing it via the chip on the results page, or a link that resets to "/".
@@ -29,11 +32,10 @@ export function Header() {
     setQuery((current) => (current === urlQuery ? current : urlQuery))
   }, [urlQuery])
 
-  // Live, not submit-on-Enter: filtering 396 products is fast enough that
-  // requiring a keypress just adds friction. Reads the latest params via the
-  // functional updater so a search doesn't clobber a category or filter
-  // selection made moments earlier — the previous version replaced the
-  // entire query string, which lost category context on every search.
+  // Live, not submit-on-Enter: filtering is fast enough that requiring a
+  // keypress just adds friction. Reads the latest params via the functional
+  // updater so a search doesn't clobber a category or filter selection made
+  // moments earlier.
   function updateQuery(value: string) {
     setQuery(value)
     setSearchParams(
@@ -41,6 +43,7 @@ export function Header() {
         const next = new URLSearchParams(prev)
         if (value.trim()) next.set('q', value.trim())
         else next.delete('q')
+        next.delete('p') // a new search invalidates whatever page you were on
         return next
       },
       { replace: true },
@@ -98,9 +101,9 @@ export function Header() {
               : 'text-ink-soft hover:bg-code-bg hover:text-ink'
           }`}
         >
-          All <span className="opacity-70">({dataset.products.length})</span>
+          All <span className="opacity-70">({rows.length.toLocaleString()})</span>
         </Link>
-        {CATEGORIES.map((cat) => (
+        {visibleCategories.map((cat) => (
           <Link
             key={cat}
             to={`/?category=${cat}`}
@@ -110,7 +113,7 @@ export function Header() {
                 : 'text-ink-soft hover:bg-code-bg hover:text-ink'
             }`}
           >
-            {CATEGORY_LABELS[cat]} <span className="opacity-70">({categoryCounts[cat] ?? 0})</span>
+            {CATEGORY_LABELS[cat]} <span className="opacity-70">({(categoryCounts[cat] ?? 0).toLocaleString()})</span>
           </Link>
         ))}
       </nav>

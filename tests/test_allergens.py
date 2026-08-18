@@ -47,6 +47,77 @@ def test_lookalikes_do_not_report_milk_or_soy(name: str) -> None:
     assert "soy" not in found, f"{name!r} wrongly flagged as soy"
 
 
+# ---------------------------------------------------------------------------
+# Prefix-collision false positives, found by auditing every distinct
+# ingredient/nutrient name (77,260 of them) across the full ~118k-product
+# DSLD corpus (build_dataset_supplements.py). A leading-boundary-only regex
+# read each of these as containing an allergen it has nothing to do with -
+# a vocabulary two orders of magnitude larger than the protein-powder subset
+# is where short prefixes like "cod", "egg" and "crab" stop being safe.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "name,must_not_contain",
+    [
+        ("Eggplant", "egg"),
+        ("Eggplant Extract, Powder", "egg"),
+        ("Codonopsis", "fish"),                       # a Chinese herbal root, not cod
+        ("Codonopsis pilosula Root Extract", "fish"),
+        ("CodeAge Deep Blue Mind Enhancing Blend", "fish"),  # brand name
+        ("Crab Apple (Malus sylvestris) bud extract", "shellfish"),
+        ("Milkweed", "milk"),                          # botanical (Asclepias)
+        ("Flat-stem Milkvetch Seed", "milk"),           # botanical (Astragalus)
+        ("GlutenGone", "gluten"),                       # a gluten-digestion aid, not gluten
+        ("Glutenase, Powder", "gluten"),                # an enzyme that BREAKS DOWN gluten
+    ],
+)
+def test_full_corpus_prefix_collisions_excluded(name: str, must_not_contain: str) -> None:
+    assert must_not_contain not in detect_allergens(name), (
+        f"{name!r} wrongly flagged as {must_not_contain!r}"
+    )
+
+
+@pytest.mark.parametrize(
+    "name,expected",
+    [
+        # Fused compounds that a trailing word-boundary would otherwise also
+        # exclude - each needed its own explicit pattern entry to survive
+        # tightening the boundary.
+        ("Milkfat", "milk"),
+        ("Eggshell Membrane", "egg"),
+        ("Eggwhite powder", "egg"),
+        ("Barleygrass", "gluten"),
+        ("Soymilk powder", "soy"),
+        ("Soynatto Fermented Soyfood", "soy"),
+        # Plurals - a strict `\bword\b` boundary must not silently exclude
+        # the plural form of an otherwise-correct match.
+        ("Peanuts", "peanut"),
+        ("Almonds", "tree nut"),
+        ("Cashews", "tree nut"),
+        ("Walnuts", "tree nut"),
+        ("Eggs", "egg"),
+        ("Fish Eggs", "egg"),
+        ("Soybeans", "soy"),
+    ],
+)
+def test_fused_and_plural_forms_still_detected(name: str, expected: str) -> None:
+    assert expected in detect_allergens(name), f"{name!r} should still report {expected!r}"
+
+
+def test_milky_oat_is_not_dairy() -> None:
+    """A common nervine herbal ingredient (Avena sativa, milky stage) - not milk."""
+    for name in ("Milky Oat", "Oat Milky Seed Extract", "Wild Oats milky seed fresh"):
+        assert "milk" not in detect_allergens(name), f"{name!r} wrongly flagged as milk"
+
+
+def test_krill_is_shellfish_but_crab_apple_is_not() -> None:
+    assert "shellfish" in detect_allergens("Antarctic Krill Oil")
+    assert "shellfish" in detect_allergens("Crab")
+    assert "shellfish" in detect_allergens("Shrimp")
+    assert "shellfish" not in detect_allergens("Crab Apple")
+
+
 @pytest.mark.parametrize(
     "name",
     ["Coconut Milk", "Coconut Milk, Powder", "Coconut Cream", "Coconut Oil"],

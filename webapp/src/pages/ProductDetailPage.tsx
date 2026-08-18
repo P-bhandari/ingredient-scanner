@@ -5,7 +5,7 @@ import { ProductPhoto } from '../components/ProductPhoto'
 import { TrustDetail } from '../components/TrustBadge'
 import { allergenStatus, allergensFor, proteinPctByWeight } from '../data/derived'
 import { CATEGORY_LABELS, INGREDIENT_CATEGORY_LABELS, type Ingredient } from '../data/types'
-import { useDataset } from '../data/useDataset'
+import { useProductDetail } from '../data/useProductDetail'
 import { useDocumentTitle } from '../useDocumentTitle'
 
 const MACRO_ROWS: Array<{ key: keyof import('../data/types').Macros; label: string; unit: string }> = [
@@ -58,18 +58,34 @@ function IngredientRow({ ingredient }: { ingredient: Ingredient }) {
 
 export function ProductDetailPage() {
   const { id } = useParams()
-  const { dataset } = useDataset()
+  const numericId = id != null && /^\d+$/.test(id) ? Number(id) : null
+  const { product, loading, error } = useProductDetail(numericId)
   const [showStub, setShowStub] = useState(false)
 
-  const product = dataset.products.find((p) => p.dsld_id === Number(id))
-
   // Called before any early return — hooks can't run conditionally.
-  useDocumentTitle(product ? `${product.name} — ${product.brand}` : 'Product not found')
+  useDocumentTitle(product ? `${product.name} — ${product.brand}` : loading ? 'Loading…' : 'Product not found')
 
-  if (!product) {
+  if (numericId == null) {
     return (
       <div className="mx-auto max-w-3xl px-6 py-16">
-        <p className="text-ink-soft">Product not found.</p>
+        <p className="text-ink-soft">Not a valid product link.</p>
+        <Link to="/" className="text-accent hover:underline">
+          ‹ Back to browse
+        </Link>
+      </div>
+    )
+  }
+
+  if (loading) {
+    return <div className="mx-auto max-w-3xl px-6 py-16 text-ink-soft">Loading…</div>
+  }
+
+  if (error || !product) {
+    return (
+      <div className="mx-auto max-w-3xl px-6 py-16">
+        <p className="text-claim">
+          {error ? `Couldn't load this product: ${error}` : "Product not found — it may have been removed from the source database."}
+        </p>
         <Link to="/" className="text-accent hover:underline">
           ‹ Back to browse
         </Link>

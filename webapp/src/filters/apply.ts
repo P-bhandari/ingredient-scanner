@@ -1,12 +1,4 @@
-import {
-  allIngredients,
-  allergensFor,
-  hasArtificialSweetener,
-  hasIndependentVerification,
-  hasProprietaryBlend,
-  proteinPctByWeight,
-} from '../data/derived'
-import type { Product } from '../data/types'
+import type { Certifier, IndexRow } from '../data/types'
 import type { Filters } from './types'
 
 /**
@@ -25,8 +17,31 @@ function nameMatches(ingredientName: string, needle: string): boolean {
   return new RegExp(`\\b${escaped}(s|es)?\\b`, 'i').test(ingredientName)
 }
 
-function matchesAnyIngredient(product: Product, needle: string): boolean {
-  return allIngredients(product).some((i) => nameMatches(i.name, needle))
+function matchesAnyIngredient(row: IndexRow, needle: string): boolean {
+  return row.ingredientNames.some((name) => nameMatches(name, needle))
+}
+
+/** The certification constraint in isolation — shared by matchesFilters and
+ * the facet-count fast path below, which needs to test it against a
+ * certifier list that isn't necessarily `filters.certifiers` itself. */
+export function certifierConstraintSatisfied(
+  row: IndexRow,
+  certifiers: readonly Certifier[],
+  mode: 'any' | 'all',
+): boolean {
+  const held = new Set(row.certifiers)
+  return mode === 'any' ? certifiers.some((c) => held.has(c)) : certifiers.every((c) => held.has(c))
+}
+
+/** The allergen-exclusion constraint in isolation, for the same reason. */
+export function allergenConstraintSatisfied(
+  row: IndexRow,
+  excludeAllergens: readonly string[],
+  requireDeclaration: boolean,
+): boolean {
+  if (excludeAllergens.some((a) => row.allergens.includes(a))) return false
+  if (requireDeclaration && row.allergenDeclarationMissing) return false
+  return true
 }
 
 /**
@@ -40,11 +55,26 @@ function matchesAnyIngredient(product: Product, needle: string): boolean {
  *   - Exclusions are always AND — "exclude all of these".
  *
  * Groups always combine with AND.
+ *
+ * Operates on IndexRow, not Product: at ~117,800 rows this runs on every
+ * keystroke, and IndexRow's fields are already flat and precomputed
+ * (protein %, trust state, allergen union) rather than nested structures that
+ * would need re-deriving on every pass.
+ *
+ * `except` skips one dimension's check entirely. It exists so the facet-count
+ * computation in BrowsePage can compute "passes everything except
+ * certifiers" once and reuse it across all six certifier options, rather
+ * than re-running the full gauntlet — ingredients, brand, allergens, flags —
+ * once per option. matchesFilters itself is just this with nothing excluded.
  */
-export function matchesFilters(product: Product, filters: Filters): boolean {
+export function matchesFiltersExcept(
+  row: IndexRow,
+  filters: Filters,
+  except: 'certifiers' | 'allergens' | 'none',
+): boolean {
   // --- has ingredient (multi-valued -> respects match mode) ---------------
   if (filters.includeIngredients.length) {
-    const test = (needle: string) => matchesAnyIngredient(product, needle)
+    const test = (needle: string) => matchesAnyIngredient(row, needle)
     const ok =
       filters.ingredientMatchMode === 'any'
         ? filters.includeIngredients.some(test)
@@ -53,61 +83,58 @@ export function matchesFilters(product: Product, filters: Filters): boolean {
   }
 
   // --- does not have ingredient (exclusion -> always AND) -----------------
-  if (filters.excludeIngredients.some((needle) => matchesAnyIngredient(product, needle))) {
+  if (filters.excludeIngredients.some((needle) => matchesAnyIngredient(row, needle))) {
     return false
   }
 
   // --- certification (multi-valued -> respects match mode) ----------------
-  if (filters.certifiers.length) {
-    const held = new Set(product.trust.certifications.map((c) => c.certifier))
-    const ok =
-      filters.certMatchMode === 'any'
-        ? filters.certifiers.some((c) => held.has(c))
-        : filters.certifiers.every((c) => held.has(c))
-    if (!ok) return false
+  if (except !== 'certifiers') {
+    if (filters.certifiers.length && !certifierConstraintSatisfied(row, filters.certifiers, filters.certMatchMode)) {
+      return false
+    }
+    if (filters.noCertOnly && row.trustState === 'verified') return false
   }
 
-  if (filters.noCertOnly && hasIndependentVerification(product.trust)) return false
-
   // --- brand (single-valued -> OR) ---------------------------------------
-  if (filters.brands.length && !filters.brands.includes(product.brand)) return false
+  if (filters.brands.length && !filters.brands.includes(row.brand)) return false
 
   // --- allergens (exclusion -> always AND) --------------------------------
   // Uses declared + detected. Filtering on the declaration alone let whey
   // products through an "exclude milk" filter.
-  if (filters.excludeAllergens.length) {
-    const present = allergensFor(product)
-    if (filters.excludeAllergens.some((a) => present.includes(a))) return false
-    // A label that declares nothing cannot support a "free of" claim. Opt-in
-    // so the default stays permissive, but available to anyone who needs
-    // certainty rather than silence.
-    if (filters.requireAllergenDeclaration && product.allergen_declaration_missing) {
+  if (except !== 'allergens') {
+    if (
+      filters.excludeAllergens.length &&
+      !allergenConstraintSatisfied(row, filters.excludeAllergens, filters.requireAllergenDeclaration)
+    ) {
       return false
     }
   }
 
   // --- flags --------------------------------------------------------------
-  if (filters.noArtificialSweetener && hasArtificialSweetener(product)) return false
-  if (filters.noProprietaryBlend && hasProprietaryBlend(product)) return false
-  if (filters.onMarketOnly && product.off_market) return false
+  if (filters.noArtificialSweetener && row.hasArtificialSweetener) return false
+  if (filters.noProprietaryBlend && row.hasProprietaryBlend) return false
+  if (filters.onMarketOnly && row.offMarket) return false
 
   // --- macros -------------------------------------------------------------
   if (filters.minProteinPct != null) {
-    const pct = proteinPctByWeight(product)
-    if (pct == null || pct < filters.minProteinPct) return false
+    if (row.proteinPct == null || row.proteinPct < filters.minProteinPct) return false
   }
 
   return true
 }
 
-export function matchesSearch(product: Product, query: string): boolean {
+export function matchesFilters(row: IndexRow, filters: Filters): boolean {
+  return matchesFiltersExcept(row, filters, 'none')
+}
+
+export function matchesSearch(row: IndexRow, query: string): boolean {
   const q = query.trim().toLowerCase()
   if (!q) return true
   return (
-    product.brand.toLowerCase().includes(q) ||
-    product.name.toLowerCase().includes(q) ||
+    row.brand.toLowerCase().includes(q) ||
+    row.name.toLowerCase().includes(q) ||
     // Searching ingredients is what people actually want from a label tool.
-    allIngredients(product).some((i) => i.name.toLowerCase().includes(q))
+    row.ingredientNames.some((name) => name.toLowerCase().includes(q))
   )
 }
 
@@ -131,20 +158,17 @@ export const SORT_LABELS: Record<SortKey, string> = {
  * make the point. Products with no derivable protein % sort last rather than
  * being treated as 0%.
  */
-export function sortProducts(products: Product[], key: SortKey): Product[] {
-  const byProtein = (a: Product, b: Product, dir: 1 | -1) => {
-    const av = proteinPctByWeight(a)
-    const bv = proteinPctByWeight(b)
-    if (av == null && bv == null) return 0
-    if (av == null) return 1
-    if (bv == null) return -1
-    return (av - bv) * dir
+export function sortProducts(rows: IndexRow[], key: SortKey): IndexRow[] {
+  const byProtein = (a: IndexRow, b: IndexRow, dir: 1 | -1) => {
+    if (a.proteinPct == null && b.proteinPct == null) return 0
+    if (a.proteinPct == null) return 1
+    if (b.proteinPct == null) return -1
+    return (a.proteinPct - b.proteinPct) * dir
   }
 
-  const trustRank = (p: Product) =>
-    hasIndependentVerification(p.trust) ? 0 : p.off_market ? 2 : 1
+  const trustRank = (row: IndexRow) => (row.trustState === 'verified' ? 0 : row.offMarket ? 2 : 1)
 
-  return [...products].sort((a, b) => {
+  return [...rows].sort((a, b) => {
     switch (key) {
       case 'protein-desc':
         return byProtein(a, b, -1)

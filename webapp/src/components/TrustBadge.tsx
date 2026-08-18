@@ -1,40 +1,61 @@
 import { hasIndependentVerification, impliesApprovalWithoutVerification, trustState } from '../data/derived'
-import { CERTIFIER_LABELS, CERT_SCOPE_LABELS, type Trust } from '../data/types'
+import { CERTIFIER_LABELS, CERT_SCOPE_LABELS, type Certifier, type Trust, type TrustState } from '../data/types'
 
-const STYLES: Record<string, string> = {
+const STYLES: Record<TrustState, string> = {
   verified: 'bg-verified-bg text-verified border-verified/30',
   'claim-only': 'bg-claim-bg text-claim border-claim/30',
   neutral: 'bg-code-bg text-ink-soft border-line-strong',
 }
 
-const DOT: Record<string, string> = {
+const DOT: Record<TrustState, string> = {
   verified: 'bg-verified',
   'claim-only': 'bg-claim',
   neutral: 'bg-ink-soft',
 }
 
-function compactLabel(trust: Trust): string {
-  const state = trustState(trust)
+function label(state: TrustState, certifiers: Certifier[]): string {
   if (state === 'verified') {
-    return trust.certifications.length === 1
-      ? CERTIFIER_LABELS[trust.certifications[0].certifier]
-      : `${trust.certifications.length} certifications`
+    return certifiers.length === 1 ? CERTIFIER_LABELS[certifiers[0]] : `${certifiers.length} certifications`
   }
   if (state === 'claim-only') return 'Claims, no verification'
   return 'No certification claim'
 }
 
-export function TrustBadge({ trust, size = 'md' }: { trust: Trust; size?: 'sm' | 'md' }) {
-  const state = trustState(trust)
+/**
+ * The compact badge, built from precomputed state rather than a full Trust
+ * object — this is what a browse-grid card renders, and a card only has an
+ * IndexRow (state + certifier list), not the full certification scopes that
+ * live in a product's shard.
+ */
+export function StateBadge({
+  state,
+  certifiers,
+  size = 'md',
+}: {
+  state: TrustState
+  certifiers: Certifier[]
+  size?: 'sm' | 'md'
+}) {
   const sizeClasses = size === 'sm' ? 'text-[0.68rem] px-2 py-1' : 'text-[0.78rem] px-3 py-1.5'
-
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-[3px] border font-mono uppercase tracking-wide ${sizeClasses} ${STYLES[state]}`}
     >
       <span className={`h-[7px] w-[7px] shrink-0 rounded-full ${DOT[state]}`} />
-      {compactLabel(trust)}
+      {label(state, certifiers)}
     </span>
+  )
+}
+
+/** Same badge, from a full Trust object — used on the product detail page,
+ * which has the real certification list rather than just its state. */
+export function TrustBadge({ trust, size = 'md' }: { trust: Trust; size?: 'sm' | 'md' }) {
+  return (
+    <StateBadge
+      state={trustState(trust)}
+      certifiers={trust.certifications.map((c) => c.certifier)}
+      size={size}
+    />
   )
 }
 

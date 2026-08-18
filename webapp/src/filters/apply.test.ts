@@ -1,70 +1,31 @@
 import { describe, expect, it } from 'vitest'
 import { matchesFilters, matchesSearch, sortProducts } from './apply'
 import { EMPTY_FILTERS, type Filters } from './types'
-import type { Certification, Certifier, Ingredient, Product } from '../data/types'
+import type { Certifier, IndexRow } from '../data/types'
 
 // ---------------------------------------------------------------------------
-// Fixtures
+// Fixtures — IndexRow, not Product. matchesFilters/matchesSearch/sortProducts
+// operate on the browse index (flat, precomputed fields), which is what
+// actually gets filtered at ~117,800-row scale; Product (nested, full detail)
+// is fetched lazily per-product on the detail page and never filtered.
 // ---------------------------------------------------------------------------
 
-function ingredient(name: string, extra: Partial<Ingredient> = {}): Ingredient {
+function row(over: Partial<IndexRow> = {}): IndexRow {
   return {
-    name,
-    unii: null,
-    dsld_category: null,
-    categories: [],
-    quantity: null,
-    unit: null,
-    percent_dv: null,
-    depth: 0,
-    is_proprietary_blend: false,
-    ...extra,
-  }
-}
-
-function cert(certifier: Certifier): Certification {
-  return { certifier, scopes: [], match_confidence: 1, source_url: '', retrieved: '' }
-}
-
-function product(over: Partial<Product> = {}): Product {
-  return {
-    dsld_id: 1,
+    id: 1,
     brand: 'Brand',
     name: 'Product',
-    upc: null,
-    off_market: false,
-    entry_date: null,
-    physical_state: null,
-    product_type: null,
-    serving: { quantity: 30, max_quantity: null, unit: 'Gram(s)', note: null, per_container: null },
-    macros: {
-      calories: null, protein_g: null, total_fat_g: null, saturated_fat_g: null,
-      cholesterol_mg: null, total_carbs_g: null, sugar_g: null, added_sugar_g: null,
-      fibre_g: null, sodium_mg: null, calcium_mg: null, potassium_mg: null,
-    },
-    ingredients: [],
-    other_ingredients: [],
-    nutrient_panel: [],
+    category: 'vitamin',
+    offMarket: false,
+    proteinPct: null,
+    trustState: 'neutral',
+    certifiers: [],
     allergens: [],
-    allergens_detected: [],
-    target_groups: [],
-    trust: {
-      certifications: [],
-      gmp_claimed: false,
-      fda_registration_claimed: false,
-      third_party_tested_claimed: false,
-      dshea_disclaimer_present: false,
-    },
-    manufacturer: null,
-    manufacturer_country: null,
-    source: 'DSLD',
-    source_url: null,
-    category: 'whey',
-    protein_pct_by_weight: null,
-    protein_pct_basis: null,
-    serving_grams: 30,
-    allergens_all: [],
-    allergen_declaration_missing: true,
+    allergenDeclarationMissing: true,
+    ingredientNames: [],
+    hasArtificialSweetener: false,
+    hasProprietaryBlend: false,
+    shard: 0,
     ...over,
   }
 }
@@ -77,12 +38,11 @@ const f = (over: Partial<Filters> = {}): Filters => ({ ...EMPTY_FILTERS, ...over
 // ---------------------------------------------------------------------------
 
 describe('certification matching', () => {
-  const both = product({
-    trust: { ...product().trust, certifications: [cert('informed_choice'), cert('informed_sport')] },
+  const both = row({
+    trustState: 'verified',
+    certifiers: ['informed_choice', 'informed_sport'],
   })
-  const onlyChoice = product({
-    trust: { ...product().trust, certifications: [cert('informed_choice')] },
-  })
+  const onlyChoice = row({ trustState: 'verified', certifiers: ['informed_choice'] })
 
   it('requires ALL selected certifiers by default', () => {
     const filters = f({ certifiers: ['informed_choice', 'informed_sport'] })
@@ -105,7 +65,7 @@ describe('certification matching', () => {
 
   it('noCertOnly excludes anything independently certified', () => {
     expect(matchesFilters(onlyChoice, f({ noCertOnly: true }))).toBe(false)
-    expect(matchesFilters(product(), f({ noCertOnly: true }))).toBe(true)
+    expect(matchesFilters(row(), f({ noCertOnly: true }))).toBe(true)
   })
 })
 
@@ -116,28 +76,22 @@ describe('certification matching', () => {
 describe('allergen exclusion', () => {
   it('excludes on detected allergens, not just declared ones', () => {
     // The exact production bug: whey with no declaration used to pass.
-    const undeclaredWhey = product({
-      ingredients: [ingredient('Whey Protein Concentrate')],
-      allergens: [],
-      allergens_detected: ['milk'],
-      allergens_all: ['milk'],
-      allergen_declaration_missing: true,
-    })
+    const undeclaredWhey = row({ allergens: ['milk'], allergenDeclarationMissing: true })
     expect(matchesFilters(undeclaredWhey, f({ excludeAllergens: ['milk'] }))).toBe(false)
   })
 
   it('keeps products with no trace of the allergen', () => {
-    const pea = product({ allergens_all: [], allergens_detected: [] })
+    const pea = row({ allergens: [] })
     expect(matchesFilters(pea, f({ excludeAllergens: ['milk'] }))).toBe(true)
   })
 
   it('excludes every selected allergen, not just one of them', () => {
-    const soyOnly = product({ allergens_all: ['soy'] })
+    const soyOnly = row({ allergens: ['soy'] })
     expect(matchesFilters(soyOnly, f({ excludeAllergens: ['milk', 'soy'] }))).toBe(false)
   })
 
   it('can additionally require that the label declares something', () => {
-    const silent = product({ allergens_all: [], allergen_declaration_missing: true })
+    const silent = row({ allergens: [], allergenDeclarationMissing: true })
     expect(matchesFilters(silent, f({ excludeAllergens: ['milk'] }))).toBe(true)
     expect(
       matchesFilters(silent, f({ excludeAllergens: ['milk'], requireAllergenDeclaration: true })),
@@ -150,7 +104,7 @@ describe('allergen exclusion', () => {
 // ---------------------------------------------------------------------------
 
 describe('ingredient matching', () => {
-  const withSucralose = product({ ingredients: [ingredient('Sucralose'), ingredient('Whey Protein')] })
+  const withSucralose = row({ ingredientNames: ['Sucralose', 'Whey Protein'] })
 
   it('requires all listed ingredients by default', () => {
     expect(matchesFilters(withSucralose, f({ includeIngredients: ['sucralose', 'whey'] }))).toBe(true)
@@ -167,19 +121,14 @@ describe('ingredient matching', () => {
   })
 
   it('matches on word boundaries, so "pea" does not match "peanut"', () => {
-    const peanut = product({ ingredients: [ingredient('Peanut Flour')] })
+    const peanut = row({ ingredientNames: ['Peanut Flour'] })
     expect(matchesFilters(peanut, f({ includeIngredients: ['pea'] }))).toBe(false)
     expect(matchesFilters(peanut, f({ includeIngredients: ['peanut'] }))).toBe(true)
   })
 
   it('matches mid-name words', () => {
-    const p = product({ ingredients: [ingredient('organic Whey Protein concentrate')] })
+    const p = row({ ingredientNames: ['organic Whey Protein concentrate'] })
     expect(matchesFilters(p, f({ includeIngredients: ['whey'] }))).toBe(true)
-  })
-
-  it('searches other_ingredients too (43% of products keep them there)', () => {
-    const p = product({ ingredients: [], other_ingredients: [ingredient('Stevia extract')] })
-    expect(matchesFilters(p, f({ includeIngredients: ['stevia'] }))).toBe(true)
   })
 
   it('does not crash on regex metacharacters', () => {
@@ -193,7 +142,7 @@ describe('ingredient matching', () => {
 
 describe('brand', () => {
   it('matches any of the selected brands', () => {
-    const p = product({ brand: 'NutraBio' })
+    const p = row({ brand: 'NutraBio' })
     expect(matchesFilters(p, f({ brands: ['NutraBio', 'GHOST'] }))).toBe(true)
     expect(matchesFilters(p, f({ brands: ['GHOST'] }))).toBe(false)
   })
@@ -205,13 +154,28 @@ describe('brand', () => {
 
 describe('minimum protein', () => {
   it('keeps products above the threshold', () => {
-    expect(matchesFilters(product({ protein_pct_by_weight: 80 }), f({ minProteinPct: 70 }))).toBe(true)
+    expect(matchesFilters(row({ proteinPct: 80 }), f({ minProteinPct: 70 }))).toBe(true)
   })
   it('drops products below it', () => {
-    expect(matchesFilters(product({ protein_pct_by_weight: 60 }), f({ minProteinPct: 70 }))).toBe(false)
+    expect(matchesFilters(row({ proteinPct: 60 }), f({ minProteinPct: 70 }))).toBe(false)
   })
   it('drops products with no derivable figure rather than guessing', () => {
-    expect(matchesFilters(product({ protein_pct_by_weight: null }), f({ minProteinPct: 70 }))).toBe(false)
+    expect(matchesFilters(row({ proteinPct: null }), f({ minProteinPct: 70 }))).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// On-market default
+// ---------------------------------------------------------------------------
+
+describe('on-market default', () => {
+  it('hides off-market products by default', () => {
+    const offMarket = row({ offMarket: true })
+    expect(matchesFilters(offMarket, EMPTY_FILTERS)).toBe(false)
+  })
+  it('shows them when explicitly opted back in', () => {
+    const offMarket = row({ offMarket: true })
+    expect(matchesFilters(offMarket, f({ onMarketOnly: false }))).toBe(true)
   })
 })
 
@@ -220,7 +184,7 @@ describe('minimum protein', () => {
 // ---------------------------------------------------------------------------
 
 describe('search', () => {
-  const p = product({ brand: 'NutraBio', name: 'Whey Isolate', ingredients: [ingredient('Sucralose')] })
+  const p = row({ brand: 'NutraBio', name: 'Whey Isolate', ingredientNames: ['Sucralose'] })
 
   it('matches brand and name case-insensitively', () => {
     expect(matchesSearch(p, 'nutrabio')).toBe(true)
@@ -242,36 +206,44 @@ describe('search', () => {
 // ---------------------------------------------------------------------------
 
 describe('sorting', () => {
-  const certified = product({
-    dsld_id: 1,
-    protein_pct_by_weight: 50,
-    trust: { ...product().trust, certifications: [cert('informed_sport')] },
-  })
-  const plain = product({ dsld_id: 2, protein_pct_by_weight: 90 })
-  const offMarket = product({ dsld_id: 3, protein_pct_by_weight: 95, off_market: true })
-  const unknown = product({ dsld_id: 4, protein_pct_by_weight: null })
+  const certified = row({ id: 1, proteinPct: 50, trustState: 'verified' })
+  const plain = row({ id: 2, proteinPct: 90 })
+  const offMarket = row({ id: 3, proteinPct: 95, offMarket: true })
+  const unknown = row({ id: 4, proteinPct: null })
 
   it('puts certified products first by default, then on-market, then off-market', () => {
-    const ids = sortProducts([plain, offMarket, certified], 'trust').map((p) => p.dsld_id)
+    const ids = sortProducts([plain, offMarket, certified], 'trust').map((r) => r.id)
     expect(ids).toEqual([1, 2, 3])
   })
 
   it('sorts by protein descending', () => {
-    const ids = sortProducts([certified, plain], 'protein-desc').map((p) => p.dsld_id)
+    const ids = sortProducts([certified, plain], 'protein-desc').map((r) => r.id)
     expect(ids).toEqual([2, 1])
   })
 
   it('sorts products with no protein figure last, not as zero', () => {
-    const ids = sortProducts([unknown, certified], 'protein-desc').map((p) => p.dsld_id)
+    const ids = sortProducts([unknown, certified], 'protein-desc').map((r) => r.id)
     expect(ids).toEqual([1, 4])
-    const asc = sortProducts([unknown, certified], 'protein-asc').map((p) => p.dsld_id)
+    const asc = sortProducts([unknown, certified], 'protein-asc').map((r) => r.id)
     expect(asc).toEqual([1, 4])
   })
 
   it('does not mutate the input array', () => {
     const input = [plain, certified]
     sortProducts(input, 'trust')
-    expect(input.map((p) => p.dsld_id)).toEqual([2, 1])
+    expect(input.map((r) => r.id)).toEqual([2, 1])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Certifier list edge cases specific to IndexRow (flat certifiers array
+// rather than Certification objects with scopes)
+// ---------------------------------------------------------------------------
+
+describe('certifiers array', () => {
+  it('an empty certifiers array never satisfies a certification filter', () => {
+    const p = row({ trustState: 'neutral', certifiers: [] })
+    expect(matchesFilters(p, f({ certifiers: ['informed_sport' as Certifier] }))).toBe(false)
   })
 })
 
@@ -281,10 +253,10 @@ describe('sorting', () => {
 
 describe('groups combine with AND', () => {
   it('requires every active facet to pass', () => {
-    const p = product({
+    const p = row({
       brand: 'NutraBio',
-      ingredients: [ingredient('Sucralose')],
-      protein_pct_by_weight: 80,
+      ingredientNames: ['Sucralose'],
+      proteinPct: 80,
     })
     expect(matchesFilters(p, f({ brands: ['NutraBio'], minProteinPct: 70 }))).toBe(true)
     // same product, but now also required to be sucralose-free
@@ -293,7 +265,7 @@ describe('groups combine with AND', () => {
     ).toBe(false)
   })
 
-  it('an empty filter set matches everything', () => {
-    expect(matchesFilters(product(), EMPTY_FILTERS)).toBe(true)
+  it('an empty filter set matches an on-market product', () => {
+    expect(matchesFilters(row(), EMPTY_FILTERS)).toBe(true)
   })
 })

@@ -352,6 +352,14 @@ def categorise(
 # ---------------------------------------------------------------------------
 
 #: allergen -> regex alternatives that unambiguously indicate it.
+#:
+#: Audited against every distinct ingredient/nutrient name across the full
+#: ~118,000-product DSLD corpus (build_dataset_supplements.py), not just the
+#: protein-powder subset - a vocabulary two orders of magnitude larger, where
+#: short prefixes stop being safe. "milkfat" and "eggshell"/"eggwhite" are
+#: listed explicitly because the general fix below (require a trailing word
+#: boundary) would otherwise silently stop matching them, being fused
+#: compounds rather than "milk butter" / "egg shell" as separate words.
 _ALLERGEN_PATTERNS: dict[str, tuple[str, ...]] = {
     "milk": (
         r"whey",
@@ -360,12 +368,13 @@ _ALLERGEN_PATTERNS: dict[str, tuple[str, ...]] = {
         r"lactose",
         r"lactalbumin",
         r"lactoglobulin",
+        r"milkfat",
         r"dairy",
     ),
-    "soy": (r"soy", r"soya", r"soybean"),
-    "egg": (r"egg", r"eggshell", r"albumen", r"ovalbumin"),
+    "soy": (r"soy", r"soya", r"soybean", r"soymilk", r"soynatto"),
+    "egg": (r"egg", r"eggshell", r"eggwhite", r"albumen", r"ovalbumin"),
     "wheat": (r"wheat", r"wheatgrass"),
-    "gluten": (r"gluten", r"barley", r"rye"),
+    "gluten": (r"gluten", r"barley", r"barleygrass", r"rye"),
     "peanut": (r"peanut", r"arachis"),
     "tree nut": (
         r"almond",
@@ -384,10 +393,16 @@ _ALLERGEN_PATTERNS: dict[str, tuple[str, ...]] = {
 }
 
 #: `milk` also fires on the bare word, but only when no non-dairy qualifier is
-#: present - "Coconut Milk", "Almond Milk", "Oat Milk", "Milk Thistle".
+#: present - "Coconut Milk", "Almond Milk", "Oat Milk", "Milk Thistle", or
+#: "Milky Oat" (a real, common herbal ingredient - Avena sativa harvested in
+#: its milky stage - unrelated to dairy).
 _NON_DAIRY_MILK = re.compile(
-    r"\b(coconut|almond|oat|soy|soya|rice|hemp|cashew|pea|flax|thistle)\b", re.IGNORECASE
+    r"\b(coconut|almond|oat|oats|soy|soya|rice|hemp|cashew|pea|flax|thistle)\b", re.IGNORECASE
 )
+
+#: "Crab Apple" is a fruit. The only false positive this specific, across the
+#: full corpus, that survives a whole-word match on its own trigger word.
+_NOT_SHELLFISH = re.compile(r"\bcrab\s*apple", re.IGNORECASE)
 
 
 def detect_allergens(name: str) -> set[str]:
@@ -397,6 +412,20 @@ def detect_allergens(name: str) -> set[str]:
     Conservative by design - see the module note above. Returns an empty set
     for names with no allergen signal, which is *not* the same as a claim that
     the ingredient is allergen-free.
+
+    Matching requires a full word, plural "s" tolerated ("Peanuts",
+    "Almonds") - not a bare prefix. A prefix-only check (fixed in this
+    module after auditing the full ~118k-product corpus) read "Codonopsis" as
+    containing "cod" (fish), "Eggplant" as containing "egg", "Crab Apple" as
+    containing "crab" (shellfish), and "Glutenase" - an enzyme sold to help
+    people *digest* gluten - as containing gluten itself. All four are
+    unrelated to the allergen they matched; a filter that invents allergens
+    which aren't there is exactly as unsafe as one that misses real ones,
+    since it teaches a user to stop trusting the flag at all. The trade-off,
+    accepted deliberately: a handful of fused marketing names not on the
+    explicit list above (e.g. "SoyLife", "Wheybolic") won't self-identify by
+    name alone. Real declared allergens (Trust's `allergens` field) never
+    depend on this function.
     """
     found: set[str] = set()
     if not name:
@@ -404,13 +433,16 @@ def detect_allergens(name: str) -> set[str]:
 
     for allergen, patterns in _ALLERGEN_PATTERNS.items():
         for pattern in patterns:
-            if re.search(rf"\b{pattern}", name, re.IGNORECASE):
+            if re.search(rf"\b{pattern}s?\b", name, re.IGNORECASE):
                 found.add(allergen)
                 break
 
     # Bare "milk", only when it isn't one of the plant milks.
-    if re.search(r"\bmilk", name, re.IGNORECASE) and not _NON_DAIRY_MILK.search(name):
+    if re.search(r"\bmilks?\b", name, re.IGNORECASE) and not _NON_DAIRY_MILK.search(name):
         found.add("milk")
+
+    if "shellfish" in found and _NOT_SHELLFISH.search(name):
+        found.discard("shellfish")
 
     # Wheat implies gluten; the reverse does not hold.
     if "wheat" in found:

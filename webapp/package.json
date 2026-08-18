@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:artifact": "tsc -b && vite build --config vite.config.artifact.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "oxlint",
@@ -27,7 +26,6 @@
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",
     "vite": "^8.2.0",
-    "vite-plugin-singlefile": "^2.3.3",
     "vitest": "^4.1.10"
   }
 }

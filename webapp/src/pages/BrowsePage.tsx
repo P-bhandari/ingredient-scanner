@@ -3,12 +3,20 @@ import { useSearchParams } from 'react-router-dom'
 import { ProductCard } from '../components/ProductCard'
 import { FilterPanel } from '../components/FilterPanel'
 import type { FacetCounts } from '../components/FilterBar'
-import { allIngredients } from '../data/derived'
-import { CATEGORY_LABELS, type ProteinCategory } from '../data/types'
-import { useDataset } from '../data/useDataset'
+import { CATEGORY_LABELS, type ProductCategory } from '../data/types'
+import { useCatalogue } from '../data/useCatalogue'
 import { useFavorites } from '../favorites/useFavorites'
 import { useDocumentTitle } from '../useDocumentTitle'
-import { matchesFilters, matchesSearch, sortProducts, SORT_LABELS, type SortKey } from '../filters/apply'
+import {
+  allergenConstraintSatisfied,
+  certifierConstraintSatisfied,
+  matchesFilters,
+  matchesFiltersExcept,
+  matchesSearch,
+  sortProducts,
+  SORT_LABELS,
+  type SortKey,
+} from '../filters/apply'
 import {
   activeCount,
   applyFiltersToParams,
@@ -20,59 +28,81 @@ import {
 
 const SORT_KEYS = Object.keys(SORT_LABELS) as SortKey[]
 
+// The catalogue is ~117,800 rows. Rendering every match as a card with no
+// pagination was the actual cause of a multi-second (sometimes 30+ second)
+// main-thread block on load — not the filter/facet computation, which is
+// cheap by comparison. React mounting tens of thousands of card components
+// at once is not something any amount of memoizing the data underneath it
+// fixes; the render itself has to be bounded.
+const PAGE_SIZE = 60
+
 export function BrowsePage() {
-  const { dataset } = useDataset()
+  const { catalogue } = useCatalogue()
   const [searchParams, setSearchParams] = useSearchParams()
   const { favoriteIds } = useFavorites()
 
-  const category = searchParams.get('category') as ProteinCategory | null
+  const category = searchParams.get('category') as ProductCategory | null
   const query = searchParams.get('q') ?? ''
   const favoritesOnly = searchParams.get('favorites') === '1'
   const filters = useMemo(() => filtersFromParams(searchParams), [searchParams])
+  const requestedPage = Number(searchParams.get('p') ?? '1')
+  const page = Number.isFinite(requestedPage) && requestedPage >= 1 ? Math.floor(requestedPage) : 1
 
+  // Any change to what the result set contains has to drop back to page 1 —
+  // otherwise narrowing a filter can strand you on a now-nonexistent page 47.
   function setFilters(next: Filters) {
-    setSearchParams(applyFiltersToParams(next, searchParams), { replace: true })
+    const params = applyFiltersToParams(next, searchParams)
+    params.delete('p')
+    setSearchParams(params, { replace: true })
   }
 
-  const { ingredientOptions, brandOptions } = useMemo(() => {
-    const ingredients = new Set<string>()
-    const brands = new Set<string>()
-    for (const p of dataset.products) {
-      brands.add(p.brand)
-      for (const i of allIngredients(p)) ingredients.add(i.name)
-    }
-    return {
-      ingredientOptions: [...ingredients].sort((a, b) => a.localeCompare(b)),
-      brandOptions: [...brands].sort((a, b) => a.localeCompare(b)),
-    }
-  }, [dataset])
+  function goToPage(next: number) {
+    const params = new URLSearchParams(searchParams)
+    if (next <= 1) params.delete('p')
+    else params.set('p', String(next))
+    setSearchParams(params, { replace: true })
+    window.scrollTo(0, 0)
+  }
 
-  /** Products passing everything except the facet being counted. */
-  const scoped = useMemo(
-    () =>
-      dataset.products.filter((p) => {
-        if (category && p.category !== category) return false
-        if (favoritesOnly && !favoriteIds.has(p.dsld_id)) return false
-        return matchesSearch(p, query)
-      }),
-    [dataset, category, favoritesOnly, favoriteIds, query],
-  )
+  const rows = catalogue?.rows ?? []
+  // Precomputed server-side (webapp/scripts/prepare_full_catalogue.py) —
+  // scanning every ingredientNames array across ~117,800 rows to build these
+  // two lists client-side blocked the main thread for tens of seconds.
+  const ingredientOptions = catalogue?.facets.ingredientNames ?? []
+  const brandOptions = catalogue?.facets.brands ?? []
 
-  const results = useMemo(
-    () => sortProducts(scoped.filter((p) => matchesFilters(p, filters)), filters.sort),
-    [scoped, filters],
-  )
+  /** Rows passing everything except the facet being counted. */
+  const scoped = useMemo(() => {
+    return rows.filter((row) => {
+      if (category && row.category !== category) return false
+      if (favoritesOnly && !favoriteIds.has(row.id)) return false
+      return matchesSearch(row, query)
+    })
+  }, [rows, category, favoritesOnly, favoriteIds, query])
+
+  const results = useMemo(() => {
+    return sortProducts(scoped.filter((row) => matchesFilters(row, filters)), filters.sort)
+  }, [scoped, filters])
 
   /**
    * Counts are computed against everything else that's active, so a number
    * always answers "how many would I get if I clicked this" rather than a
    * static catalogue total. Zero-count options are then disabled, which is
    * what makes AND-matching usable instead of a dead end.
+   *
+   * Naively, this is 20 full re-scans of `scoped` (one per certifier/allergen
+   * option), each re-running every filter dimension — ingredients, brand,
+   * flags — that doesn't even vary across those options. At ~117,800 rows
+   * that measured at ~1.7s of blocking main-thread work. Instead: compute
+   * "passes everything except certifiers" once and "...except allergens"
+   * once (two full scans), then check just the one varying constraint per
+   * option against those already-narrowed lists.
    */
   const counts: FacetCounts = useMemo(() => {
     const countWith = (patch: Partial<Filters>) =>
-      scoped.filter((p) => matchesFilters(p, { ...filters, ...patch })).length
+      scoped.filter((row) => matchesFilters(row, { ...filters, ...patch })).length
 
+    const baseForCert = scoped.filter((row) => matchesFiltersExcept(row, filters, 'certifiers'))
     const certifiers: Record<string, number> = {}
     for (const c of [
       'nsf_certified_for_sport',
@@ -83,15 +113,24 @@ export function BrowsePage() {
       'bscg',
     ] as const) {
       certifiers[c] = filters.certifiers.includes(c)
-        ? countWith({})
-        : countWith({ certifiers: [...filters.certifiers, c] })
+        ? baseForCert.filter((row) =>
+            certifierConstraintSatisfied(row, filters.certifiers, filters.certMatchMode),
+          ).length
+        : baseForCert.filter((row) =>
+            certifierConstraintSatisfied(row, [...filters.certifiers, c], filters.certMatchMode),
+          ).length
     }
 
+    const baseForAllergen = scoped.filter((row) => matchesFiltersExcept(row, filters, 'allergens'))
     const allergens: Record<string, number> = {}
     for (const a of ['milk', 'soy', 'egg', 'wheat', 'peanut', 'tree nut', 'fish', 'shellfish', 'sesame', 'gluten']) {
       allergens[a] = filters.excludeAllergens.includes(a)
-        ? countWith({})
-        : countWith({ excludeAllergens: [...filters.excludeAllergens, a] })
+        ? baseForAllergen.filter((row) =>
+            allergenConstraintSatisfied(row, filters.excludeAllergens, filters.requireAllergenDeclaration),
+          ).length
+        : baseForAllergen.filter((row) =>
+            allergenConstraintSatisfied(row, [...filters.excludeAllergens, a], filters.requireAllergenDeclaration),
+          ).length
     }
 
     return {
@@ -105,6 +144,13 @@ export function BrowsePage() {
       },
     }
   }, [scoped, filters])
+
+  const totalPages = Math.max(1, Math.ceil(results.length / PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const pagedResults = useMemo(
+    () => results.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [results, currentPage],
+  )
 
   const heading = favoritesOnly ? 'Your favorites' : category ? CATEGORY_LABELS[category] : 'All products'
   const active = activeCount(filters)
@@ -126,7 +172,9 @@ export function BrowsePage() {
           <h1 className="font-serif text-2xl font-semibold text-ink">{heading}</h1>
           <div className="flex items-center gap-3">
             <span className="font-mono text-[0.78rem] tabular-nums text-ink-soft">
-              {results.length} of {scoped.length}
+              {results.length > 0
+                ? `${((currentPage - 1) * PAGE_SIZE + 1).toLocaleString()}–${Math.min(currentPage * PAGE_SIZE, results.length).toLocaleString()} of ${results.length.toLocaleString()}`
+                : `0 of ${scoped.length.toLocaleString()}`}
             </span>
             <label className="flex items-center gap-1.5">
               <span className="sr-only">Sort by</span>
@@ -159,11 +207,16 @@ export function BrowsePage() {
         {results.length === 0 ? (
           <EmptyState filters={filters} scopedCount={scoped.length} onChange={setFilters} />
         ) : (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            {results.map((p) => (
-              <ProductCard key={p.dsld_id} product={p} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {pagedResults.map((row) => (
+                <ProductCard key={row.id} row={row} />
+              ))}
+            </div>
+            {totalPages > 1 && (
+              <Pagination page={currentPage} totalPages={totalPages} onChange={goToPage} />
+            )}
+          </>
         )}
 
         {active > 0 && results.length > 0 && (
@@ -173,6 +226,61 @@ export function BrowsePage() {
         )}
       </div>
     </div>
+  )
+}
+
+function Pagination({
+  page,
+  totalPages,
+  onChange,
+}: {
+  page: number
+  totalPages: number
+  onChange: (page: number) => void
+}) {
+  // A handful of neighbours plus the first/last page, with gaps collapsed to
+  // an ellipsis — enough to navigate 1,900+ pages without listing them all.
+  const radius = 2
+  const pages = new Set<number>([1, totalPages])
+  for (let p = page - radius; p <= page + radius; p++) {
+    if (p >= 1 && p <= totalPages) pages.add(p)
+  }
+  const sorted = [...pages].sort((a, b) => a - b)
+
+  return (
+    <nav aria-label="Pagination" className="mt-8 flex items-center justify-center gap-1">
+      <button
+        type="button"
+        onClick={() => onChange(page - 1)}
+        disabled={page <= 1}
+        className="rounded border border-line-strong px-2.5 py-1.5 font-mono text-[0.76rem] text-ink-soft hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        ‹ Prev
+      </button>
+      {sorted.map((p, i) => (
+        <span key={p} className="flex items-center gap-1">
+          {i > 0 && p - sorted[i - 1] > 1 && <span className="px-1 text-ink-soft">…</span>}
+          <button
+            type="button"
+            onClick={() => onChange(p)}
+            aria-current={p === page ? 'page' : undefined}
+            className={`min-w-[2rem] rounded px-2 py-1.5 font-mono text-[0.76rem] tabular-nums ${
+              p === page ? 'bg-accent-soft text-accent' : 'text-ink-soft hover:text-ink'
+            }`}
+          >
+            {p}
+          </button>
+        </span>
+      ))}
+      <button
+        type="button"
+        onClick={() => onChange(page + 1)}
+        disabled={page >= totalPages}
+        className="rounded border border-line-strong px-2.5 py-1.5 font-mono text-[0.76rem] text-ink-soft hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        Next ›
+      </button>
+    </nav>
   )
 }
 
@@ -307,7 +415,7 @@ function EmptyState({
     <div className="rounded border border-line bg-paper-raised px-5 py-8 text-center">
       <p className="font-serif text-lg text-ink">No products match these filters.</p>
       <p className="mt-1 text-[0.86rem] text-ink-soft">
-        {scopedCount} product{scopedCount === 1 ? '' : 's'} available before filtering.
+        {scopedCount.toLocaleString()} product{scopedCount === 1 ? '' : 's'} available before filtering.
       </p>
       {suspects.length > 0 && (
         <ul className="mx-auto mt-4 flex max-w-sm flex-col gap-2">
