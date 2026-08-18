@@ -23,6 +23,8 @@ function row(over: Partial<IndexRow> = {}): IndexRow {
     allergens: [],
     allergenDeclarationMissing: true,
     ingredientNames: [],
+    activeCount: 0,
+    shortcuts: [],
     hasArtificialSweetener: false,
     hasProprietaryBlend: false,
     shard: 0,

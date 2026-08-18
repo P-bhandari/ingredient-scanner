@@ -179,8 +179,17 @@ export interface IndexRow {
   /** Declared + detected allergens, unioned (same as Product.allergens_all). */
   allergens: string[]
   allergenDeclarationMissing: boolean
-  /** Flat ingredient names only (no categories/quantities — see Product for those). */
+  /**
+   * Flat ingredient names, actives first: ingredientNames.slice(0,
+   * activeCount) is the Supplement Facts + nutrient panel (what the label
+   * calls active), the rest is the Other Ingredients line (capsule shells,
+   * flow agents, binders). The split is the label's own structure, not a
+   * guess — see prepare_full_catalogue.py's split_ingredients().
+   */
   ingredientNames: string[]
+  activeCount: number
+  /** Curated ingredient shortcuts this label's actives satisfy — see Facets.shortcuts. */
+  shortcuts: string[]
   hasArtificialSweetener: boolean
   hasProprietaryBlend: boolean
   /** Which shard file (public/data/shards/<shard>.json) holds the full Product. */
@@ -195,15 +204,39 @@ export interface CatalogueMeta {
   shardCount: number
 }
 
+/** One ingredient's standing across the corpus, split by how labels list it. */
+export interface IngredientFacet {
+  name: string
+  /** Labels where this appeared in the Supplement Facts panel or nutrient panel. */
+  active: number
+  /** Labels where this appeared only in Other Ingredients. */
+  other: number
+}
+
 /**
- * Autocomplete option lists (public/data/facets.json), precomputed at build
- * time. Building these by scanning every ingredientNames array across
- * ~117,800 index rows client-side blocked the main thread for tens of
- * seconds — an aggregate over the whole corpus belongs in the batch build.
+ * A curated entry point into search — "Vitamin D", "Magnesium", "Omega-3" —
+ * matched against active ingredients only and precomputed server-side. Not a
+ * classification of the catalogue the way ProductCategory is: every shortcut
+ * is a search shortcut with a real, checkable count, and one that matches
+ * nothing is simply absent from this list rather than shown at zero.
+ */
+export interface Shortcut {
+  slug: string
+  label: string
+  count: number
+}
+
+/**
+ * Autocomplete option lists and landing-page shortcuts (public/data/
+ * facets.json), precomputed at build time. Building these by scanning every
+ * ingredientNames array across ~117,800 index rows client-side blocked the
+ * main thread for tens of seconds — an aggregate over the whole corpus
+ * belongs in the batch build.
  */
 export interface Facets {
-  ingredientNames: string[]
+  ingredients: IngredientFacet[]
   brands: string[]
+  shortcuts: Shortcut[]
 }
 
 export const CERTIFIER_LABELS: Record<Certifier, string> = {

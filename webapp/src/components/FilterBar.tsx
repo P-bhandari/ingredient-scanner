@@ -178,10 +178,12 @@ export function FilterBar({
         title="Has ingredient"
         activeSummary={filters.includeIngredients.length ? `${filters.includeIngredients.length}` : undefined}
       >
-        <MatchModeToggle
-          value={filters.ingredientMatchMode}
-          onChange={(m) => patch({ ingredientMatchMode: m })}
-        />
+        {filters.includeIngredients.length > 1 && (
+          <MatchModeToggle
+            value={filters.ingredientMatchMode}
+            onChange={(m) => patch({ ingredientMatchMode: m })}
+          />
+        )}
         <TagSearchInput
           options={ingredientOptions}
           selected={filters.includeIngredients}
@@ -204,14 +206,23 @@ export function FilterBar({
 
       <Section
         title="Certification"
+        // Only 1.6% of the full catalogue carries any third-party
+        // certification (it's a near-universal signal in the old
+        // protein-powder-only dataset, a rare one here) — collapsed by
+        // default so it doesn't crowd out filters that apply to everyone.
+        defaultOpen={false}
         activeSummary={filters.certifiers.length ? `${filters.certifiers.length}` : undefined}
         hint={
-          filters.certMatchMode === 'all'
-            ? 'Match all: products carrying every certification you select.'
-            : 'Match any: products carrying at least one.'
+          filters.certifiers.length > 1
+            ? filters.certMatchMode === 'all'
+              ? 'Match all: products carrying every certification you select.'
+              : 'Match any: products carrying at least one.'
+            : undefined
         }
       >
-        <MatchModeToggle value={filters.certMatchMode} onChange={(m) => patch({ certMatchMode: m })} />
+        {filters.certifiers.length > 1 && (
+          <MatchModeToggle value={filters.certMatchMode} onChange={(m) => patch({ certMatchMode: m })} />
+        )}
         {CERTIFIERS.map((c) => (
           <Checkbox
             key={c}

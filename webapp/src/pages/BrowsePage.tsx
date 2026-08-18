@@ -42,6 +42,7 @@ export function BrowsePage() {
   const { favoriteIds } = useFavorites()
 
   const category = searchParams.get('category') as ProductCategory | null
+  const shortcut = searchParams.get('shortcut')
   const query = searchParams.get('q') ?? ''
   const favoritesOnly = searchParams.get('favorites') === '1'
   const filters = useMemo(() => filtersFromParams(searchParams), [searchParams])
@@ -65,20 +66,32 @@ export function BrowsePage() {
   }
 
   const rows = catalogue?.rows ?? []
+  const shortcutMeta = catalogue?.facets.shortcuts.find((s) => s.slug === shortcut)
+
   // Precomputed server-side (webapp/scripts/prepare_full_catalogue.py) —
   // scanning every ingredientNames array across ~117,800 rows to build these
-  // two lists client-side blocked the main thread for tens of seconds.
-  const ingredientOptions = catalogue?.facets.ingredientNames ?? []
+  // client-side blocked the main thread for tens of seconds.
+  //
+  // Ranked actives-first (label appearances in the Supplement Facts panel,
+  // not just raw frequency), because TagSearchInput caps its dropdown at 100
+  // matches: sorted alphabetically, typing "mag" surfaced Magnesium Stearate
+  // and Magnesium Oxide — capsule fillers — ahead of the mineral itself,
+  // since fillers vastly outnumber actives by raw appearance count.
+  const ingredientOptions = useMemo(() => {
+    const list = catalogue?.facets.ingredients ?? []
+    return [...list].sort((a, b) => b.active - a.active || a.name.localeCompare(b.name)).map((i) => i.name)
+  }, [catalogue])
   const brandOptions = catalogue?.facets.brands ?? []
 
   /** Rows passing everything except the facet being counted. */
   const scoped = useMemo(() => {
     return rows.filter((row) => {
       if (category && row.category !== category) return false
+      if (shortcut && !row.shortcuts.includes(shortcut)) return false
       if (favoritesOnly && !favoriteIds.has(row.id)) return false
       return matchesSearch(row, query)
     })
-  }, [rows, category, favoritesOnly, favoriteIds, query])
+  }, [rows, category, shortcut, favoritesOnly, favoriteIds, query])
 
   const results = useMemo(() => {
     return sortProducts(scoped.filter((row) => matchesFilters(row, filters)), filters.sort)
@@ -152,7 +165,13 @@ export function BrowsePage() {
     [results, currentPage],
   )
 
-  const heading = favoritesOnly ? 'Your favorites' : category ? CATEGORY_LABELS[category] : 'All products'
+  const heading = favoritesOnly
+    ? 'Your favorites'
+    : shortcutMeta
+      ? shortcutMeta.label
+      : category
+        ? CATEGORY_LABELS[category]
+        : 'All products'
   const active = activeCount(filters)
   useDocumentTitle(query ? `${query} — search` : heading)
 
@@ -196,10 +215,17 @@ export function BrowsePage() {
         <ActiveFilterChips
           filters={filters}
           query={query}
+          shortcutLabel={shortcutMeta?.label ?? null}
           onChange={setFilters}
           onClearSearch={() => {
             const next = new URLSearchParams(searchParams)
             next.delete('q')
+            setSearchParams(next, { replace: true })
+          }}
+          onClearShortcut={() => {
+            const next = new URLSearchParams(searchParams)
+            next.delete('shortcut')
+            next.delete('p')
             setSearchParams(next, { replace: true })
           }}
         />
@@ -288,13 +314,17 @@ function Pagination({
 function ActiveFilterChips({
   filters,
   query,
+  shortcutLabel,
   onChange,
   onClearSearch,
+  onClearShortcut,
 }: {
   filters: Filters
   query: string
+  shortcutLabel: string | null
   onChange: (f: Filters) => void
   onClearSearch: () => void
+  onClearShortcut: () => void
 }) {
   const chips: Array<{ label: string; clear: () => void }> = []
 
@@ -337,10 +367,21 @@ function ActiveFilterChips({
   if (filters.minProteinPct != null)
     chips.push({ label: `≥${filters.minProteinPct}% protein`, clear: () => onChange({ ...filters, minProteinPct: null }) })
 
-  if (!chips.length && !query) return null
+  if (!chips.length && !query && !shortcutLabel) return null
 
   return (
     <div className="mb-4 flex flex-wrap items-center gap-1.5">
+      {shortcutLabel && (
+        <button
+          type="button"
+          onClick={onClearShortcut}
+          className="inline-flex items-center gap-1 rounded-[3px] border border-line-strong bg-code-bg px-2 py-1 font-mono text-[0.7rem] text-ink-soft hover:border-accent hover:text-accent"
+        >
+          ingredient: {shortcutLabel}
+          <span aria-hidden>×</span>
+          <span className="sr-only">Clear ingredient shortcut</span>
+        </button>
+      )}
       {query && (
         <button
           type="button"

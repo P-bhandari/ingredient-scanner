@@ -34,7 +34,9 @@ whose whole premise is not overclaiming what the data supports.
 from __future__ import annotations
 
 import json
+import re
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -70,6 +72,93 @@ PRODUCT_TYPE_TO_CATEGORY: dict[str, str] = {
 }
 UNCATEGORIZED = "uncategorized"
 
+# Curated entry points for the landing page — the things people actually
+# arrive looking for, as opposed to DSLD's product_type taxonomy (whose two
+# largest buckets, "Other Combinations" and "Non-Nutrient/Non-Botanical",
+# account for 47% of the corpus and mean nothing to a shopper).
+#
+# These are shortcuts into search, not a classification of the catalogue:
+# each one resolves to "this label declares one of these as an ACTIVE
+# ingredient", every match is precomputed here and visible on the row, and a
+# shortcut that matches nothing is never shown. That keeps them checkable
+# rather than editorial — the user lands on a real filtered list, not a
+# curated opinion about what belongs.
+#
+# Matched against actives only (Supplement Facts panel + nutrient panel),
+# never against Other Ingredients: a trace of magnesium stearate must not
+# make a product show up under "Magnesium".
+# A vitamin's name routinely carries a form suffix ("Vitamin D3", "Vitamin
+# B-12"), so a bare \b after the letter fails on exactly the rows that matter.
+# _FORM allows an optional separator and digits before requiring the boundary.
+_FORM = r"[-\s]?\d*\b"
+
+# Several minerals share a name with a common excipient — magnesium/calcium/
+# zinc stearate are flow agents, iron oxide is a colourant. Actives-only
+# matching already excludes almost all of these, so these guards are only for
+# the rare label that lists one inside its Supplement Facts panel.
+_NOT_EXCIPIENT = r"(?!\s+stearate|\s+oxide\b)"
+
+SHORTCUTS: dict[str, tuple[str, list[str]]] = {
+    "vitamin-d": ("Vitamin D", [rf"\bvitamin\s*d{_FORM}", r"cholecalciferol", r"ergocalciferol"]),
+    "vitamin-c": ("Vitamin C", [rf"\bvitamin\s*c{_FORM}", r"ascorbic acid", r"\bascorbates?\b"]),
+    "vitamin-b12": ("Vitamin B12", [r"\bvitamin\s*b[-\s]?12\b", r"cobalamin"]),
+    "vitamin-b": ("B Vitamins", [r"\bvitamin\s*b[-\s]?\d*\b", r"niacin", r"riboflavin", r"thiamin", r"folate", r"folic acid", r"biotin", r"pantothenic"]),
+    "vitamin-e": ("Vitamin E", [rf"\bvitamin\s*e{_FORM}", r"tocopherol", r"tocotrienol"]),
+    "magnesium": ("Magnesium", [rf"\bmagnesium\b{_NOT_EXCIPIENT}"]),
+    "zinc": ("Zinc", [rf"\bzinc\b{_NOT_EXCIPIENT}"]),
+    "iron": ("Iron", [rf"\biron\b{_NOT_EXCIPIENT}", r"\bferrous\b"]),
+    "calcium": ("Calcium", [rf"\bcalcium\b{_NOT_EXCIPIENT}"]),
+    "omega-3": ("Omega-3", [r"omega-?\s?3", r"fish oil", r"docosahexaenoic", r"eicosapentaenoic", r"\bdha\b", r"\bepa\b", r"krill oil", r"flaxseed oil"]),
+    "probiotics": ("Probiotics", [r"lactobacillus", r"bifidobacterium", r"\bprobiotic", r"saccharomyces boulardii"]),
+    "melatonin": ("Melatonin", [r"\bmelatonin\b"]),
+    "turmeric": ("Turmeric", [r"\bturmeric\b", r"curcumin", r"curcuma longa"]),
+    "collagen": ("Collagen", [r"\bcollagen\b"]),
+    "ashwagandha": ("Ashwagandha", [r"ashwagandha", r"withania"]),
+    "coq10": ("CoQ10", [r"coenzyme\s*q", r"\bco-?q-?10\b", r"ubiquinol", r"ubiquinone"]),
+    "creatine": ("Creatine", [r"\bcreatine\b"]),
+    "elderberry": ("Elderberry", [r"elderberry", r"sambucus"]),
+    "fiber": ("Fiber", [r"\bpsyllium\b", r"\binulin\b", r"\bfibers?\b", r"glucomannan"]),
+    "protein": ("Protein", [r"whey protein", r"\bcasein\b", r"pea protein", r"soy protein", r"\bwhey\s+(isolate|concentrate)\b"]),
+    "probiotic-enzymes": ("Digestive Enzymes", [r"\bbromelain\b", r"\bpapain\b", r"\bamylase\b", r"\bprotease\b", r"\blipase\b", r"\bcellulase\b"]),
+}
+_SHORTCUT_RE: dict[str, re.Pattern[str]] = {
+    slug: re.compile("|".join(patterns), re.IGNORECASE) for slug, (_, patterns) in SHORTCUTS.items()
+}
+
+
+def split_ingredients(product: Product) -> tuple[list[str], list[str]]:
+    """
+    Split a label's ingredient names into actives and excipients, using the
+    label's *own* structure rather than guessing from the names.
+
+    DSLD keeps three lists, and the distinction is the label's, not ours:
+      - `ingredients`    the Supplement Facts panel
+      - `nutrient_panel` the vitamin/mineral rows of that same panel
+      - `other_ingredients` the "Other Ingredients:" line — capsule shells,
+        flow agents, binders
+
+    Both of the first two are active; the third is not. This matters because
+    the excipients dominate by raw frequency (Magnesium Stearate appears on
+    26,602 labels, Gelatin on 22,047) and would otherwise drown out every
+    real ingredient in an autocomplete ranked by count.
+
+    nutrient_panel was previously omitted from the index entirely, which left
+    ~13,600 products with no searchable contents at all and made a search for
+    "Vitamin D" miss almost every multivitamin that contains it.
+    """
+    actives = [i.name for i in product.ingredients]
+    actives += [n.name for n in product.nutrient_panel]
+    others = [i.name for i in product.other_ingredients]
+    return actives, others
+
+
+def shortcuts_for(actives: list[str]) -> list[str]:
+    """Which curated entry points this label's actives satisfy."""
+    if not actives:
+        return []
+    blob = " | ".join(actives)
+    return [slug for slug, pattern in _SHORTCUT_RE.items() if pattern.search(blob)]
+
 
 def trust_state(product: Product) -> str:
     if product.trust.has_independent_verification:
@@ -97,8 +186,14 @@ def index_row(product: Product, category: str, shard: int) -> dict[str, Any]:
     """The compact record used for browsing every one of ~117,800 products at
     once. Every field a filter, sort, search, or card needs to answer without
     fetching a shard -- and nothing else."""
-    names = [i.name for i in product.ingredients + product.other_ingredients]
+    actives, others = split_ingredients(product)
+    # Actives first, then excipients, with activeCount marking the boundary:
+    # lets the client separate the two (rank an autocomplete, scope a filter)
+    # without storing either list twice in a 117,800-row file.
+    names = actives + others
     return {
+        "activeCount": len(actives),
+        "shortcuts": shortcuts_for(actives),
         "id": product.dsld_id,
         "brand": product.brand,
         "name": product.name,
@@ -203,8 +298,14 @@ def main() -> int:
             elif prefix == "products":
                 break
 
-    all_ingredient_names: set[str] = set()
+    # Per-ingredient tallies, split by how the label itself listed it. The
+    # autocomplete ranks on these: an ingredient is worth suggesting in
+    # proportion to how often it is actually an active, not how often it
+    # appears at all (which just surfaces capsule fillers).
+    active_counts: Counter[str] = Counter()
+    excipient_counts: Counter[str] = Counter()
     all_brands: set[str] = set()
+    shortcut_counts: Counter[str] = Counter()
 
     n = 0
     with SOURCE.open("rb") as handle:
@@ -222,7 +323,13 @@ def main() -> int:
             row = index_row(product, category, shard)
             index.append(row)
             all_brands.add(row["brand"])
-            all_ingredient_names.update(row["ingredientNames"])
+            names = row["ingredientNames"]
+            split = row["activeCount"]
+            # Count each distinct name once per product, so a label that
+            # repeats an ingredient doesn't inflate its standing.
+            active_counts.update(set(names[:split]))
+            excipient_counts.update(set(names[split:]))
+            shortcut_counts.update(row["shortcuts"])
 
             if n % 10_000 == 0:
                 print(f"  {n:,} products processed", file=sys.stderr)
@@ -282,11 +389,34 @@ def main() -> int:
     # This is the same principle as protein_pct_by_weight and allergens_all:
     # an aggregate over the whole corpus belongs in the batch build, not in a
     # React render.
+    #
+    # Each ingredient carries how many labels list it as an active vs as an
+    # "other ingredient". Ranking an autocomplete by raw frequency puts
+    # Magnesium Stearate (26,602 labels), Gelatin and Silica at the top --
+    # capsule fillers, never what someone is searching for. Shipping both
+    # numbers lets the UI lead with actives and still label an excipient
+    # honestly rather than hiding it.
+    ingredients = [
+        {
+            "name": name,
+            "active": active_counts.get(name, 0),
+            "other": excipient_counts.get(name, 0),
+        }
+        for name in sorted(set(active_counts) | set(excipient_counts), key=str.casefold)
+    ]
+    # Only offer a shortcut that actually leads somewhere.
+    shortcuts = [
+        {"slug": slug, "label": label, "count": shortcut_counts[slug]}
+        for slug, (label, _) in SHORTCUTS.items()
+        if shortcut_counts[slug] > 0
+    ]
+    shortcuts.sort(key=lambda s: -s["count"])
     (OUT_DIR / "facets.json").write_text(
         json.dumps(
             {
-                "ingredientNames": sorted(all_ingredient_names, key=str.casefold),
+                "ingredients": ingredients,
                 "brands": sorted(all_brands, key=str.casefold),
+                "shortcuts": shortcuts,
             },
             ensure_ascii=False,
             separators=(",", ":"),
@@ -301,7 +431,7 @@ def main() -> int:
     print(f"wrote {OUT_DIR / 'meta.json'}")
     print(
         f"wrote {OUT_DIR / 'facets.json'} ({facets_size / 1_000_000:.1f} MB, "
-        f"{len(all_ingredient_names):,} ingredients, {len(all_brands):,} brands)"
+        f"{len(ingredients):,} ingredients, {len(all_brands):,} brands, {len(shortcuts):,} shortcuts)"
     )
     print("data quality gate: PASSED")
     return 0

@@ -9,9 +9,11 @@ export function Header() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { favoriteIds } = useFavorites()
   const activeCategory = searchParams.get('category')
+  const activeShortcut = searchParams.get('shortcut')
   const showingFavorites = searchParams.get('favorites') === '1'
   const urlQuery = searchParams.get('q') ?? ''
   const [query, setQuery] = useState(urlQuery)
+  const [categoriesOpen, setCategoriesOpen] = useState(false)
 
   const rows = catalogue?.rows ?? []
 
@@ -25,6 +27,15 @@ export function Header() {
     return counts
   }, [rows])
   const visibleCategories = CATEGORY_ORDER.filter((c) => (categoryCounts[c] ?? 0) > 0)
+
+  // The dozen product_type buckets are NIH's filing system, not how anyone
+  // shops — "Other Combinations" and "Non-Nutrient/Non-Botanical" alone are
+  // 47% of the catalogue and mean nothing to a visitor. Ingredient shortcuts
+  // (precomputed server-side from what's actually in the Supplement Facts
+  // panel — see prepare_full_catalogue.py) are what people actually search
+  // for, so they take the primary nav slot; the full taxonomy is still one
+  // click away, not gone.
+  const shortcuts = catalogue?.facets.shortcuts ?? []
 
   // Keeps the input in sync when `q` changes from outside this component —
   // clearing it via the chip on the results page, or a link that resets to "/".
@@ -92,31 +103,67 @@ export function Header() {
         </Link>
       </div>
 
-      <nav className="mx-auto flex max-w-6xl flex-wrap gap-1 px-6 pb-3">
+      <nav className="mx-auto flex max-w-6xl flex-wrap items-center gap-1 px-6 pb-3">
         <Link
           to="/"
           className={`rounded px-3 py-1.5 font-mono text-[0.76rem] uppercase tracking-wide transition-colors ${
-            !activeCategory && !showingFavorites
+            !activeCategory && !activeShortcut && !showingFavorites
               ? 'bg-accent-soft text-accent'
               : 'text-ink-soft hover:bg-code-bg hover:text-ink'
           }`}
         >
           All <span className="opacity-70">({rows.length.toLocaleString()})</span>
         </Link>
-        {visibleCategories.map((cat) => (
+        {shortcuts.map((s) => (
           <Link
-            key={cat}
-            to={`/?category=${cat}`}
+            key={s.slug}
+            to={`/?shortcut=${s.slug}`}
             className={`rounded px-3 py-1.5 font-mono text-[0.76rem] uppercase tracking-wide transition-colors ${
-              activeCategory === cat
+              activeShortcut === s.slug
                 ? 'bg-accent-soft text-accent'
                 : 'text-ink-soft hover:bg-code-bg hover:text-ink'
             }`}
           >
-            {CATEGORY_LABELS[cat]} <span className="opacity-70">({(categoryCounts[cat] ?? 0).toLocaleString()})</span>
+            {s.label} <span className="opacity-70">({s.count.toLocaleString()})</span>
           </Link>
         ))}
+        <button
+          type="button"
+          onClick={() => setCategoriesOpen((v) => !v)}
+          aria-expanded={categoriesOpen}
+          className={`rounded px-3 py-1.5 font-mono text-[0.76rem] uppercase tracking-wide transition-colors ${
+            activeCategory ? 'bg-accent-soft text-accent' : 'text-ink-soft hover:bg-code-bg hover:text-ink'
+          }`}
+        >
+          {activeCategory ? CATEGORY_LABELS[activeCategory as ProductCategory] : 'Categories'}{' '}
+          <span aria-hidden>{categoriesOpen ? '▲' : '▼'}</span>
+        </button>
       </nav>
+
+      {categoriesOpen && (
+        <div className="border-t border-line bg-paper">
+          <nav
+            aria-label="Browse by category"
+            className="mx-auto flex max-w-6xl flex-wrap gap-1 px-6 py-3"
+          >
+            {visibleCategories.map((cat) => (
+              <Link
+                key={cat}
+                to={`/?category=${cat}`}
+                onClick={() => setCategoriesOpen(false)}
+                className={`rounded px-3 py-1.5 font-mono text-[0.76rem] uppercase tracking-wide transition-colors ${
+                  activeCategory === cat
+                    ? 'bg-accent-soft text-accent'
+                    : 'text-ink-soft hover:bg-code-bg hover:text-ink'
+                }`}
+              >
+                {CATEGORY_LABELS[cat]}{' '}
+                <span className="opacity-70">({(categoryCounts[cat] ?? 0).toLocaleString()})</span>
+              </Link>
+            ))}
+          </nav>
+        </div>
+      )}
     </header>
   )
 }
