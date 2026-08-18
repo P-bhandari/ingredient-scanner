@@ -1,10 +1,11 @@
-import { useMemo } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useEffect, useMemo } from 'react'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import { ProductCard } from '../components/ProductCard'
 import { FilterPanel } from '../components/FilterPanel'
 import type { FacetCounts } from '../components/FilterBar'
 import { CATEGORY_LABELS, type ProductCategory } from '../data/types'
 import { useCatalogue } from '../data/useCatalogue'
+import { saveLastBrowseUrl } from '../data/lastBrowseUrl'
 import { useFavorites } from '../favorites/useFavorites'
 import { useDocumentTitle } from '../useDocumentTitle'
 import {
@@ -20,7 +21,6 @@ import {
 import {
   activeCount,
   applyFiltersToParams,
-  EMPTY_FILTERS,
   filtersFromParams,
   isEmpty,
   type Filters,
@@ -39,7 +39,12 @@ const PAGE_SIZE = 60
 export function BrowsePage() {
   const { catalogue } = useCatalogue()
   const [searchParams, setSearchParams] = useSearchParams()
+  const location = useLocation()
   const { favoriteIds } = useFavorites()
+
+  useEffect(() => {
+    saveLastBrowseUrl(location.pathname, location.search)
+  }, [location])
 
   const category = searchParams.get('category') as ProductCategory | null
   const shortcut = searchParams.get('shortcut')
@@ -175,6 +180,32 @@ export function BrowsePage() {
   const active = activeCount(filters)
   useDocumentTitle(query ? `${query} — search` : heading)
 
+  function clearSearch() {
+    const next = new URLSearchParams(searchParams)
+    next.delete('q')
+    setSearchParams(next, { replace: true })
+  }
+  function clearShortcut() {
+    const next = new URLSearchParams(searchParams)
+    next.delete('shortcut')
+    next.delete('p')
+    setSearchParams(next, { replace: true })
+  }
+  function clearCategory() {
+    const next = new URLSearchParams(searchParams)
+    next.delete('category')
+    next.delete('p')
+    setSearchParams(next, { replace: true })
+  }
+  // The bare "clear filters" reset only ever touched the Filters object, but
+  // category and shortcut are separate URL params — a category+shortcut
+  // combination that happens to be empty (53 such pairs exist, e.g. Fiber &
+  // Other Nutrients has no Collagen products) had *no* escape hatch at all:
+  // isEmpty(filters) was true, so the clear button didn't even render.
+  function resetEverything() {
+    setSearchParams(new URLSearchParams(), { replace: true })
+  }
+
   return (
     <div className="mx-auto max-w-6xl gap-8 px-6 py-8 sm:flex sm:items-start">
       <FilterPanel
@@ -217,21 +248,23 @@ export function BrowsePage() {
           query={query}
           shortcutLabel={shortcutMeta?.label ?? null}
           onChange={setFilters}
-          onClearSearch={() => {
-            const next = new URLSearchParams(searchParams)
-            next.delete('q')
-            setSearchParams(next, { replace: true })
-          }}
-          onClearShortcut={() => {
-            const next = new URLSearchParams(searchParams)
-            next.delete('shortcut')
-            next.delete('p')
-            setSearchParams(next, { replace: true })
-          }}
+          onClearSearch={clearSearch}
+          onClearShortcut={clearShortcut}
         />
 
         {results.length === 0 ? (
-          <EmptyState filters={filters} scopedCount={scoped.length} onChange={setFilters} />
+          <EmptyState
+            filters={filters}
+            scopedCount={scoped.length}
+            onChange={setFilters}
+            categoryLabel={category ? CATEGORY_LABELS[category] : null}
+            shortcutLabel={shortcutMeta?.label ?? null}
+            hasQuery={query.length > 0}
+            onClearCategory={clearCategory}
+            onClearShortcut={clearShortcut}
+            onClearSearch={clearSearch}
+            onResetEverything={resetEverything}
+          />
         ) : (
           <>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
@@ -417,13 +450,42 @@ function EmptyState({
   filters,
   scopedCount,
   onChange,
+  categoryLabel,
+  shortcutLabel,
+  hasQuery,
+  onClearCategory,
+  onClearShortcut,
+  onClearSearch,
+  onResetEverything,
 }: {
   filters: Filters
   scopedCount: number
   onChange: (f: Filters) => void
+  /** category and shortcut live outside Filters (URL params, not filter
+   * state — see BrowsePage), so they need to be surfaced separately: a
+   * category+shortcut combination can itself be the empty set (53 such
+   * pairs exist across the catalogue) with zero Filters fields set. */
+  categoryLabel: string | null
+  shortcutLabel: string | null
+  hasQuery: boolean
+  onClearCategory: () => void
+  onClearShortcut: () => void
+  onClearSearch: () => void
+  onResetEverything: () => void
 }) {
   const suspects: Array<{ label: string; relax: () => void }> = []
 
+  // Most likely culprits first: narrowing to a category or ingredient
+  // shortcut is a bigger cut than any single filter checkbox.
+  if (shortcutLabel) {
+    suspects.push({ label: `Remove the “${shortcutLabel}” ingredient filter`, relax: onClearShortcut })
+  }
+  if (categoryLabel) {
+    suspects.push({ label: `Remove the “${categoryLabel}” category filter`, relax: onClearCategory })
+  }
+  if (hasQuery) {
+    suspects.push({ label: 'Clear the search term', relax: onClearSearch })
+  }
   if (filters.certifiers.length > 1 && filters.certMatchMode === 'all') {
     suspects.push({
       label: `Match any of your ${filters.certifiers.length} certifications instead of all`,
@@ -460,7 +522,7 @@ function EmptyState({
       </p>
       {suspects.length > 0 && (
         <ul className="mx-auto mt-4 flex max-w-sm flex-col gap-2">
-          {suspects.slice(0, 3).map((s) => (
+          {suspects.slice(0, 4).map((s) => (
             <li key={s.label}>
               <button
                 type="button"
@@ -473,13 +535,13 @@ function EmptyState({
           ))}
         </ul>
       )}
-      {!isEmpty(filters) && (
+      {(!isEmpty(filters) || categoryLabel || shortcutLabel || hasQuery) && (
         <button
           type="button"
-          onClick={() => onChange({ ...EMPTY_FILTERS, sort: filters.sort })}
+          onClick={onResetEverything}
           className="mt-4 font-mono text-[0.74rem] uppercase tracking-wide text-ink-soft hover:text-accent"
         >
-          Clear all filters
+          Clear everything
         </button>
       )}
     </div>

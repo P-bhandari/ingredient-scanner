@@ -4,9 +4,24 @@ import { FavoriteButton } from '../components/FavoriteButton'
 import { ProductPhoto } from '../components/ProductPhoto'
 import { TrustDetail } from '../components/TrustBadge'
 import { allergenStatus, allergensFor, proteinPctByWeight } from '../data/derived'
+import { getLastBrowseUrl } from '../data/lastBrowseUrl'
 import { CATEGORY_LABELS, INGREDIENT_CATEGORY_LABELS, type Ingredient } from '../data/types'
 import { useProductDetail } from '../data/useProductDetail'
 import { useDocumentTitle } from '../useDocumentTitle'
+
+/**
+ * Returns to wherever the visitor was actually browsing — search, filters,
+ * category/shortcut, page number — rather than resetting to the unfiltered
+ * catalogue. See data/lastBrowseUrl.ts for why this beats both a bare
+ * `Link to="/"` and `navigate(-1)`.
+ */
+function BackToBrowse({ className }: { className: string }) {
+  return (
+    <Link to={getLastBrowseUrl()} className={className}>
+      ‹ Back to browse
+    </Link>
+  )
+}
 
 const MACRO_ROWS: Array<{ key: keyof import('../data/types').Macros; label: string; unit: string }> = [
   { key: 'calories', label: 'Calories', unit: '' },
@@ -69,9 +84,7 @@ export function ProductDetailPage() {
     return (
       <div className="mx-auto max-w-3xl px-6 py-16">
         <p className="text-ink-soft">Not a valid product link.</p>
-        <Link to="/" className="text-accent hover:underline">
-          ‹ Back to browse
-        </Link>
+        <BackToBrowse className="text-accent hover:underline" />
       </div>
     )
   }
@@ -86,9 +99,7 @@ export function ProductDetailPage() {
         <p className="text-claim">
           {error ? `Couldn't load this product: ${error}` : "Product not found — it may have been removed from the source database."}
         </p>
-        <Link to="/" className="text-accent hover:underline">
-          ‹ Back to browse
-        </Link>
+        <BackToBrowse className="text-accent hover:underline" />
       </div>
     )
   }
@@ -99,9 +110,7 @@ export function ProductDetailPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-8">
-      <Link to="/" className="font-mono text-[0.76rem] uppercase tracking-wide text-ink-soft hover:text-accent">
-        ‹ Back to browse
-      </Link>
+      <BackToBrowse className="font-mono text-[0.76rem] uppercase tracking-wide text-ink-soft hover:text-accent" />
 
       {product.off_market && (
         <div className="mt-4 rounded border border-ink-soft/30 bg-code-bg px-4 py-2.5 text-[0.84rem] text-ink-soft">
